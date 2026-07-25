@@ -24,9 +24,15 @@ history, or downloaded files to the project maintainer.
 
 ## Browser permissions
 
-The Firefox extension uses `nativeMessaging` to request a download from the
-local VideoPaste helper. The helper rejects URLs outside Reddit and `redd.it`
-domains.
+The Firefox extension uses `nativeMessaging` only after you click its
+**Copy video** button. It sends the selected Reddit post URL or embedded media
+URL and a download command to the local VideoPaste helper. The helper rejects
+URLs outside Reddit and `redd.it` domains.
+
+Mozilla treats data sent to a native application as transmission outside the
+extension, even though VideoPaste's helper is local. The extension therefore
+declares `browsingActivity` and `websiteContent` in its Firefox data-collection
+permissions. The project maintainer does not receive this data.
 
 ## Third-party services
 

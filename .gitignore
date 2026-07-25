@@ -2,4 +2,5 @@
 .swiftpm/
 dist/
 node_modules/
+.amo-upload-uuid
 .DS_Store

@@ -1,0 +1,5 @@
+{
+  "version": {
+    "approval_notes": "VideoPaste is a macOS 13+ companion extension for the open-source VideoPaste native app. Build and register the native host with ./scripts/build-app.sh and ./scripts/install-videopaste-native-host.sh. No account, paid service, or test credentials are required. The user must click Copy video before the selected Reddit post or embedded media URL is sent to the local native host; the host rejects non-Reddit URLs. A direct packaged-media.redd.it URL can be tested without yt-dlp. The extension is readable, unbundled JavaScript with no remote code. See PRIVACY.md and docs/firefox-release.md in the submitted GitHub tag."
+  }
+}

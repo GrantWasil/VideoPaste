@@ -3,14 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "description": "Firefox companion extension for VideoPaste.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "check": "node --check content/videopaste.js && node --check background/native-bridge.js",
-    "test": "npm run check && npm run test:bridge && npm run test:overlay",
+    "lint:addon": "web-ext lint --source-dir . --self-hosted --ignore-files README.md package.json package-lock.json \"tests/**\"",
+    "test": "npm run check && npm run test:manifest && npm run test:bridge && npm run test:overlay && npm run test:package",
     "test:bridge": "node tests/native-bridge-test.cjs",
+    "test:manifest": "node tests/manifest-policy-test.cjs",
     "test:native": "node tests/native-host-test.cjs",
-    "test:overlay": "node tests/overlay-test.cjs"
+    "test:overlay": "node tests/overlay-test.cjs",
+    "test:package": "../scripts/test-firefox-package.sh"
   },
   "devDependencies": {
-    "playwright": "1.61.1"
+    "playwright": "1.61.1",
+    "web-ext": "10.5.0"
   }
 }

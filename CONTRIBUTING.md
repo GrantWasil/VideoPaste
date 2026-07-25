@@ -23,6 +23,7 @@ swift format lint --recursive --strict Sources Tests Package.swift
 cd firefox-extension
 npm install
 npm test
+npm run lint:addon
 ```
 
 After building the app, also run:
@@ -30,6 +31,10 @@ After building the app, also run:
 ```sh
 npm run test:native
 ```
+
+Changes to the Firefox manifest or release packaging must also follow
+[`docs/firefox-release.md`](docs/firefox-release.md), including synchronized
+manifest/package versions and a matching release tag.
 
 ## Pull requests
 

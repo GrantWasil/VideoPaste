@@ -2,7 +2,8 @@
   "manifest_version": 3,
   "name": "VideoPaste",
   "version": "0.1.0",
-  "description": "Downloads Reddit videos and copies them through a lightweight native helper.",
+  "description": "Sends a Reddit video URL you choose to the local VideoPaste helper so it can download and copy the video.",
+  "homepage_url": "https://github.com/GrantWasil/VideoPaste",
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png"
@@ -10,7 +11,13 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "videopaste@grantwasil",
-      "strict_min_version": "109.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "browsingActivity",
+          "websiteContent"
+        ]
+      }
     }
   },
   "permissions": [

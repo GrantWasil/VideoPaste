@@ -1,0 +1,168 @@
+name: Sign and publish Firefox extension
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to sign and update (for example, v0.1.0)
+        required: true
+        type: string
+
+concurrency:
+  group: firefox-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  build-and-sign:
+    name: Validate and sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: firefox-release
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Confirm the official release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          cache: npm
+          cache-dependency-path: firefox-extension/package-lock.json
+          node-version: 22
+
+      - name: Verify release version
+        id: version
+        run: |
+          version="$(node -p "require('./firefox-extension/manifest.json').version")"
+          package_version="$(node -p "require('./firefox-extension/package.json').version")"
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::manifest.json and package.json versions differ"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" != "v$version" ]]; then
+            echo "::error::Release tag $RELEASE_TAG must equal v$version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked development tools
+        run: npm ci --prefix firefox-extension --no-audit
+
+      - name: Install Chromium for the overlay test
+        run: ./firefox-extension/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Run extension tests
+        run: npm test --prefix firefox-extension
+
+      - name: Build reproducible signing package
+        run: ./scripts/package-firefox-extension.sh
+
+      - name: Validate the exact signing package
+        run: |
+          mkdir -p dist/firefox-signing-source
+          unzip -q \
+            "dist/videopaste-firefox-${{ steps.version.outputs.version }}.zip" \
+            -d dist/firefox-signing-source
+          ./firefox-extension/node_modules/.bin/web-ext lint \
+            --no-config-discovery \
+            --self-hosted \
+            --source-dir "$PWD/dist/firefox-signing-source"
+
+      - name: Submit to AMO and download the signed XPI
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [[ -z "${WEB_EXT_API_KEY:-}" || -z "${WEB_EXT_API_SECRET:-}" ]]; then
+            echo "::error::The firefox-release environment requires AMO_JWT_ISSUER and AMO_JWT_SECRET"
+            exit 1
+          fi
+          mkdir -p dist/firefox-signed
+          ./firefox-extension/node_modules/.bin/web-ext sign \
+            --no-config-discovery \
+            --no-input \
+            --source-dir "$PWD/dist/firefox-signing-source" \
+            --artifacts-dir "$PWD/dist/firefox-signed" \
+            --amo-metadata "$PWD/firefox-extension/amo-metadata.json" \
+            --channel unlisted \
+            --timeout 120000 \
+            --approval-timeout 1200000
+
+      - name: Prepare release assets
+        run: |
+          mapfile -t signed_xpis < <(
+            find dist/firefox-signed -maxdepth 1 -type f -name '*.xpi'
+          )
+          if [[ "${#signed_xpis[@]}" -ne 1 ]]; then
+            echo "::error::Expected one signed XPI, found ${#signed_xpis[@]}"
+            exit 1
+          fi
+          mkdir -p dist/firefox-release
+          cp \
+            "${signed_xpis[0]}" \
+            "dist/firefox-release/videopaste-firefox-${{ steps.version.outputs.version }}.xpi"
+          cp \
+            "dist/videopaste-firefox-${{ steps.version.outputs.version }}.zip" \
+            dist/firefox-release/
+          (
+            cd dist/firefox-release
+            sha256sum \
+              "videopaste-firefox-${{ steps.version.outputs.version }}.xpi" \
+              "videopaste-firefox-${{ steps.version.outputs.version }}.zip" \
+              > SHA256SUMS
+          )
+
+      - name: Retain signed release assets
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: firefox-release-${{ env.RELEASE_TAG }}
+          path: dist/firefox-release/
+          retention-days: 90
+
+  publish:
+    name: Attach assets to GitHub release
+    needs:
+      - build-and-sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download signed release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: firefox-release-${{ env.RELEASE_TAG }}
+          path: firefox-release
+
+      - name: Attach assets to the official release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-and-sign.outputs.version }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "firefox-release/videopaste-firefox-$VERSION.xpi" \
+            "firefox-release/videopaste-firefox-$VERSION.zip" \
+            "firefox-release/SHA256SUMS" \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
