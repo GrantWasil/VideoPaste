@@ -17,6 +17,9 @@
 > VideoPaste is currently a source-distributed public beta. Signed Mac and
 > Firefox releases are on the roadmap.
 
+<img width="800" height="789" alt="CleanShot 2026-07-24 at 20 44 02" src="https://github.com/user-attachments/assets/4de203eb-8f66-40ca-a5c8-3a6229e09276" />
+
+
 ## Why VideoPaste?
 
 Direct Reddit media links can expire or return an error when somebody else
