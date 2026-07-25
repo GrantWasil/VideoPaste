@@ -23,7 +23,7 @@ fi
 /usr/bin/plutil -create xml1 "$TEMP_MANIFEST"
 /usr/bin/plutil -insert name -string "com.grantwasil.videopaste" "$TEMP_MANIFEST"
 /usr/bin/plutil -insert description \
-  -string "Downloads Reddit videos and copies them to the macOS clipboard." \
+  -string "Downloads Reddit and X videos and copies them to the macOS clipboard." \
   "$TEMP_MANIFEST"
 /usr/bin/plutil -insert path -string "$HOST_PATH" "$TEMP_MANIFEST"
 /usr/bin/plutil -insert type -string "stdio" "$TEMP_MANIFEST"

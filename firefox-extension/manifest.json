@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "VideoPaste",
   "version": "0.1.0",
-  "description": "Downloads Reddit videos and copies them through a lightweight native helper.",
+  "description": "Downloads Reddit and X videos and copies them through a lightweight native helper.",
   "icons": {
     "48": "icons/icon-48.png",
     "96": "icons/icon-96.png"
@@ -25,7 +25,11 @@
     {
       "matches": [
         "*://reddit.com/*",
-        "*://*.reddit.com/*"
+        "*://*.reddit.com/*",
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*"
       ],
       "css": [
         "content/videopaste.css"

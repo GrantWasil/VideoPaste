@@ -19,6 +19,22 @@ final class ExternalDownloadRequestTests: XCTestCase {
     )
   }
 
+  func testExtractsEncodedXPostURL() throws {
+    let handoffURL = try XCTUnwrap(
+      URL(
+        string:
+          "videopaste://download?url=https%3A%2F%2Fx.com%2Fvideopaste%2Fstatus%2F1800000000000000000%3Fs%3D20"
+      )
+    )
+
+    let sourceURL = try ExternalDownloadRequest.sourceURL(from: handoffURL)
+
+    XCTAssertEqual(
+      sourceURL.absoluteString,
+      "https://x.com/videopaste/status/1800000000000000000?s=20"
+    )
+  }
+
   func testRejectsUnexpectedHandoffHost() throws {
     let handoffURL = try XCTUnwrap(
       URL(

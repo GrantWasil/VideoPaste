@@ -117,11 +117,15 @@
 }
 
 .vp-copy-button--error {
-  --vp-expanded-width: 126px;
+  --vp-expanded-width: 146px;
   background: rgba(190, 38, 51, 0.96) !important;
   gap: 6px !important;
   padding-right: 9px !important;
   width: var(--vp-expanded-width) !important;
+}
+
+.vp-copy-button.vp-copy-button--error .vp-copy-button__label {
+  max-width: 110px !important;
 }
 
 .vp-copy-button--expand-left:hover,
@@ -161,7 +165,7 @@
   }
 
   .vp-copy-button--error {
-    --vp-expanded-width: 124px;
+    --vp-expanded-width: 144px;
     padding-right: 8px !important;
     width: var(--vp-expanded-width) !important;
   }
