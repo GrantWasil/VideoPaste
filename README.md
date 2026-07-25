@@ -5,6 +5,12 @@
 <h1 align="center">VideoPaste</h1>
 
 <p align="center">
+  <a href="https://github.com/GrantWasil/VideoPaste/releases/download/v0.1.0/videopaste-firefox-0.1.0.xpi">
+    <img src="https://img.shields.io/badge/Firefox-Install%20Extension-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Install VideoPaste for Firefox">
+  </a>
+</p>
+
+<p align="center">
   <strong>Copy videos from Reddit and X. Paste them anywhere.</strong>
 </p>
 
