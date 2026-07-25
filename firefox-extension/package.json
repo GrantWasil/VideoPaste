@@ -1,0 +1,16 @@
+{
+  "name": "videopaste-firefox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Firefox companion extension for VideoPaste.",
+  "scripts": {
+    "check": "node --check content/videopaste.js && node --check background/native-bridge.js",
+    "test": "npm run check && npm run test:bridge && npm run test:overlay",
+    "test:bridge": "node tests/native-bridge-test.cjs",
+    "test:native": "node tests/native-host-test.cjs",
+    "test:overlay": "node tests/overlay-test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}
