@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift package and native host
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run Swift tests
+        run: swift test
+
+      - name: Build native messaging host
+        run: swift build --product VideoPasteNativeHost
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Test native messaging protocol
+        working-directory: firefox-extension
+        run: npm run test:native -- ../.build/debug/VideoPasteNativeHost
+
+  firefox:
+    name: Firefox extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: firefox-extension/package-lock.json
+
+      - name: Install dependencies
+        working-directory: firefox-extension
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: firefox-extension
+        run: npx playwright install --with-deps chromium
+
+      - name: Run extension tests
+        working-directory: firefox-extension
+        run: npm test
