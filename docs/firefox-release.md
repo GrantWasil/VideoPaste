@@ -51,12 +51,13 @@ approve the protected environment only for a reviewed release tag.
 ## Manifest and policy decisions
 
 - The extension requests only `nativeMessaging`.
-- Content scripts are limited to `reddit.com` and its subdomains.
-- Clicking **Copy video** sends the chosen Reddit post URL or embedded media
-  URL to the local VideoPaste native host. Mozilla treats native messaging as
-  transmission outside the extension, even when the receiving app is local.
-  The manifest therefore declares required `browsingActivity` and
-  `websiteContent`.
+- Content scripts are limited to `reddit.com`, `x.com`, `twitter.com`, and
+  their subdomains.
+- Clicking **Copy video** sends the chosen Reddit or X/Twitter post URL or
+  embedded media URL to the local VideoPaste native host. Mozilla treats native
+  messaging as transmission outside the extension, even when the receiving
+  app is local. The manifest therefore declares required `browsingActivity`
+  and `websiteContent`.
 - Firefox 140 is the minimum version so Firefox's built-in install-time data
   consent covers those declarations. Supporting Firefox 139 or earlier would
   require an in-extension consent and control experience before native
@@ -132,10 +133,11 @@ If AMO asks for manual review, provide:
   requires the native host registered by
   `scripts/install-videopaste-native-host.sh`.
 - No account, paid service, or test credentials are required.
-- The user explicitly clicks **Copy video** before a Reddit URL is sent to the
-  local native host. The host rejects non-Reddit URLs.
+- The user explicitly clicks **Copy video** before a supported Reddit or
+  X/Twitter URL is sent to the local native host. The host rejects unsupported
+  browser requests and does not receive Firefox cookies.
 - A direct `packaged-media.redd.it` URL can be tested without `yt-dlp`;
-  ordinary Reddit post URLs use `yt-dlp`.
+  ordinary Reddit and public X/Twitter post URLs use `yt-dlp`.
 - Source, build steps, tests, and the privacy statement are in the linked
   GitHub tag.
 

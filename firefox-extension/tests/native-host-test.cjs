@@ -53,7 +53,7 @@ async function run() {
   } else {
     assert.equal(response.ok, false);
     assert.equal(response.status, "error");
-    assert.match(response.error, /only accepts Reddit/i);
+    assert.match(response.error, /video post links/i);
   }
 
   console.log(

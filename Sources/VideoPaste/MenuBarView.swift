@@ -76,13 +76,13 @@ struct MenuBarView: View {
     switch model.state {
     case .idle:
       Label(
-        "Copy a Reddit video link, then click the button above.",
+        "Copy a Reddit or X video link, then click the button above.",
         systemImage: "command"
       )
       .foregroundStyle(.secondary)
 
     case .downloading:
-      Label("Fetching the video from Reddit…", systemImage: "arrow.down.circle")
+      Label("Fetching the video…", systemImage: "arrow.down.circle")
         .foregroundStyle(.secondary)
 
     case .success(let video):

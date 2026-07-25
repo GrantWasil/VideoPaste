@@ -69,7 +69,7 @@ struct ContentView: View {
       VStack(alignment: .leading, spacing: 3) {
         Text("VideoPaste")
           .font(.system(size: 24, weight: .bold, design: .rounded))
-        Text("Turn a Reddit video link into a file you can paste in Signal.")
+        Text("Turn a Reddit or X video post into a file you can paste in Signal.")
           .font(.subheadline)
           .foregroundStyle(.secondary)
       }
@@ -85,7 +85,7 @@ struct ContentView: View {
 
       HStack(spacing: 8) {
         TextField(
-          "https://packaged-media.redd.it/…",
+          "https://x.com/…/status/…",
           text: $model.inputURL,
           axis: .vertical
         )
@@ -100,7 +100,7 @@ struct ContentView: View {
       }
 
       Text(
-        "Direct video addresses work immediately. Reddit post links are supported when yt-dlp is installed."
+        "Direct video addresses work immediately. Reddit and public X post links require yt-dlp."
       )
       .font(.caption)
       .foregroundStyle(.tertiary)
@@ -146,7 +146,7 @@ struct ContentView: View {
     case .downloading:
       statusCard(color: .orange) {
         VStack(alignment: .leading, spacing: 5) {
-          Text("Fetching the video from Reddit…")
+          Text("Fetching the video…")
             .font(.headline)
           Text("Keep this window open. Most direct links finish in a few seconds.")
             .font(.caption)

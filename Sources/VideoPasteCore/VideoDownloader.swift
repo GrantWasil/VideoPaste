@@ -17,6 +17,10 @@ public enum VideoDownloadError: LocalizedError {
   case badServerResponse
   case serverRejected(Int)
   case emptyDownload
+  case privatePost
+  case authenticationRequired
+  case unavailablePost
+  case noVideo
   case helperFailed(String)
   case outputMissing
 
@@ -25,22 +29,32 @@ public enum VideoDownloadError: LocalizedError {
     case .invalidURL:
       return "That doesn’t look like a complete web address."
     case .unsupportedURL:
-      return "Please paste an http:// or https:// Reddit link."
+      return "Please paste an http:// or https:// Reddit or X link."
     case .downloaderUnavailable:
       return """
-        This looks like a Reddit post rather than a direct video link. \
+        This looks like a video post rather than a direct video link. \
         Install yt-dlp with “brew install yt-dlp”, or right-click the video \
-        on Reddit and choose Copy Video Address.
+        and choose Copy Video Address.
         """
     case .badServerResponse:
-      return "Reddit returned an unreadable response."
+      return "The video host returned an unreadable response."
     case .serverRejected(let statusCode):
       if statusCode == 403 || statusCode == 404 {
-        return "Reddit says this video link has expired. Copy a fresh video address and try again."
+        return
+          "This video link has expired or is unavailable. Copy a fresh video address and try again."
       }
-      return "Reddit rejected the download (HTTP \(statusCode))."
+      return "The video host rejected the download (HTTP \(statusCode))."
     case .emptyDownload:
-      return "Reddit returned an empty video file."
+      return "The video host returned an empty video file."
+    case .privatePost:
+      return "This post is private. VideoPaste can only download public posts."
+    case .authenticationRequired:
+      return
+        "This post requires a signed-in account. VideoPaste only downloads public posts without using browser cookies."
+    case .unavailablePost:
+      return "This post is unavailable or has been deleted."
+    case .noVideo:
+      return "This post doesn’t contain a supported video."
     case .helperFailed(let message):
       return message
     case .outputMissing:
@@ -68,6 +82,145 @@ public enum VideoDownloader {
     return pathExtension == "mp4"
       || pathExtension == "mov"
       || host == "packaged-media.redd.it"
+  }
+
+  public static func isSupportedSourceURL(_ url: URL) -> Bool {
+    guard let scheme = url.scheme?.lowercased(),
+      scheme == "https" || scheme == "http"
+    else {
+      return false
+    }
+
+    let host = url.host?.lowercased() ?? ""
+
+    if host == "redd.it"
+      || host.hasSuffix(".redd.it")
+      || host == "reddit.com"
+      || host.hasSuffix(".reddit.com")
+    {
+      return true
+    }
+
+    let supportedXHosts = [
+      "x.com",
+      "www.x.com",
+      "m.x.com",
+      "mobile.x.com",
+      "twitter.com",
+      "www.twitter.com",
+      "m.twitter.com",
+      "mobile.twitter.com",
+    ]
+    guard supportedXHosts.contains(host) else {
+      return false
+    }
+
+    let pathComponents = url.path
+      .split(separator: "/", omittingEmptySubsequences: true)
+
+    let postID: Substring
+    if pathComponents.count >= 3,
+      isXUsername(pathComponents[0]),
+      pathComponents[1].lowercased() == "status"
+    {
+      postID = pathComponents[2]
+    } else if pathComponents.count >= 4,
+      pathComponents[0].lowercased() == "i",
+      pathComponents[1].lowercased() == "web",
+      pathComponents[2].lowercased() == "status"
+    {
+      postID = pathComponents[3]
+    } else {
+      return false
+    }
+
+    return !postID.isEmpty
+      && postID.utf8.allSatisfy { (48...57).contains($0) }
+  }
+
+  static func helperError(from errorOutput: String) -> VideoDownloadError {
+    let normalized = errorOutput.lowercased()
+
+    if normalized.contains("account is protected")
+      || normalized.contains("not authorized to view")
+      || normalized.contains("not authorised to view")
+      || normalized.contains("private post")
+      || normalized.contains("private tweet")
+    {
+      return .privatePost
+    }
+
+    if normalized.contains("login required")
+      || normalized.contains("authentication required")
+      || normalized.contains("requires authentication")
+      || normalized.contains("cookies-from-browser")
+    {
+      return .authenticationRequired
+    }
+
+    if normalized.contains("no video could be found")
+      || normalized.contains("does not contain a video")
+      || normalized.contains("doesn't contain a video")
+      || normalized.contains("no downloadable video")
+    {
+      return .noVideo
+    }
+
+    if normalized.contains("unavailable")
+      || normalized.contains("has been deleted")
+      || normalized.contains("does not exist")
+      || normalized.contains("tweet not found")
+      || normalized.contains("post not found")
+      || normalized.contains("status not found")
+    {
+      return .unavailablePost
+    }
+
+    let lines =
+      errorOutput
+      .split(whereSeparator: \.isNewline)
+      .map {
+        String($0).trimmingCharacters(in: .whitespacesAndNewlines)
+      }
+      .filter { !$0.isEmpty }
+    let usefulMessage =
+      lines.last(where: {
+        $0.localizedCaseInsensitiveContains("error:")
+      })
+      ?? lines.last
+      ?? "Video post download failed."
+
+    return .helperFailed(usefulMessage)
+  }
+
+  private static func isXUsername(_ value: Substring) -> Bool {
+    guard (1...15).contains(value.utf8.count) else {
+      return false
+    }
+
+    return value.utf8.allSatisfy {
+      (48...57).contains($0)
+        || (65...90).contains($0)
+        || (97...122).contains($0)
+        || $0 == 95
+    }
+  }
+
+  static func ytdlpArguments(
+    sourceURL: URL,
+    outputTemplate: String
+  ) -> [String] {
+    [
+      "--no-playlist",
+      // X multi-video posts can still expand without an explicit item cap.
+      "--playlist-items", "1",
+      "--no-progress",
+      "--merge-output-format", "mp4",
+      "--remux-video", "mp4",
+      "--print", "after_move:filepath",
+      "--output", outputTemplate,
+      sourceURL.absoluteString,
+    ]
   }
 
   public static func download(
@@ -172,15 +325,10 @@ public enum VideoDownloader {
       let standardError = Pipe()
 
       process.executableURL = helperURL
-      process.arguments = [
-        "--no-playlist",
-        "--no-progress",
-        "--merge-output-format", "mp4",
-        "--remux-video", "mp4",
-        "--print", "after_move:filepath",
-        "--output", outputTemplate,
-        sourceURL.absoluteString,
-      ]
+      process.arguments = ytdlpArguments(
+        sourceURL: sourceURL,
+        outputTemplate: outputTemplate
+      )
       process.standardOutput = standardOutput
       process.standardError = standardError
       process.currentDirectoryURL = outputDirectory
@@ -214,13 +362,7 @@ public enum VideoDownloader {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
       guard process.terminationStatus == 0 else {
-        let usefulMessage =
-          errorOutput
-          .split(separator: "\n")
-          .last
-          .map(String.init)
-          ?? "Reddit post download failed."
-        throw VideoDownloadError.helperFailed(usefulMessage)
+        throw helperError(from: errorOutput)
       }
 
       let printedPath =
@@ -293,6 +435,6 @@ public enum VideoDownloader {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-    return "reddit-video-\(formatter.string(from: Date()))"
+    return "videopaste-video-\(formatter.string(from: Date()))"
   }
 }

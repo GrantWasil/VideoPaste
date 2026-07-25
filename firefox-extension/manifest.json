@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "VideoPaste",
   "version": "0.1.0",
-  "description": "Sends a Reddit video URL you choose to the local VideoPaste helper so it can download and copy the video.",
+  "description": "Sends a Reddit or X video URL you choose to the local VideoPaste helper so it can download and copy the video.",
   "homepage_url": "https://github.com/GrantWasil/VideoPaste",
   "icons": {
     "48": "icons/icon-48.png",
@@ -32,7 +32,11 @@
     {
       "matches": [
         "*://reddit.com/*",
-        "*://*.reddit.com/*"
+        "*://*.reddit.com/*",
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*"
       ],
       "css": [
         "content/videopaste.css"

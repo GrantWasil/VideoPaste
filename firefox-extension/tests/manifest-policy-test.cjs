@@ -42,7 +42,7 @@ assert.deepEqual(
   {
     required: ["browsingActivity", "websiteContent"],
   },
-  "Native messaging must disclose the Reddit URL and media metadata sent to the local helper"
+  "Native messaging must disclose supported post URLs and media metadata sent to the local helper"
 );
 
 assert.deepEqual(
@@ -70,6 +70,10 @@ assert.equal(contentScripts.length, 1);
 assert.deepEqual(contentScripts[0].matches, [
   "*://reddit.com/*",
   "*://*.reddit.com/*",
+  "*://x.com/*",
+  "*://*.x.com/*",
+  "*://twitter.com/*",
+  "*://*.twitter.com/*",
 ]);
 
 for (const relativePath of [

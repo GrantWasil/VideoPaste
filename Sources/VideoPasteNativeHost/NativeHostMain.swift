@@ -10,7 +10,7 @@ private enum NativeHostError: LocalizedError {
     case .unsupportedAction:
       return "Firefox requested an unsupported action."
     case .unsupportedHost:
-      return "The helper only accepts Reddit video and post links."
+      return "The helper only accepts Reddit and X video post links."
     }
   }
 }
@@ -27,7 +27,7 @@ struct VideoPasteNativeHost {
       }
 
       let sourceURL = try VideoDownloader.parsedURL(from: request.url)
-      guard isRedditURL(sourceURL) else {
+      guard VideoDownloader.isSupportedSourceURL(sourceURL) else {
         throw NativeHostError.unsupportedHost
       }
 
@@ -105,11 +105,4 @@ struct VideoPasteNativeHost {
     try? FileHandle.standardError.write(contentsOf: data)
   }
 
-  private static func isRedditURL(_ url: URL) -> Bool {
-    let host = url.host?.lowercased() ?? ""
-    return host == "redd.it"
-      || host.hasSuffix(".redd.it")
-      || host == "reddit.com"
-      || host.hasSuffix(".reddit.com")
-  }
 }

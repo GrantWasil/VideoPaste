@@ -39,7 +39,7 @@ final class AppModel: ObservableObject {
     guard inputURL.isEmpty,
       let value = NSPasteboard.general.string(forType: .string),
       let url = try? VideoDownloader.parsedURL(from: value),
-      isRedditRelated(url)
+      VideoDownloader.isSupportedSourceURL(url)
     else {
       return
     }
@@ -70,10 +70,13 @@ final class AppModel: ObservableObject {
   func handleExternalDownloadRequest(_ handoffURL: URL) {
     do {
       let sourceURL = try ExternalDownloadRequest.sourceURL(from: handoffURL)
+      guard VideoDownloader.isSupportedSourceURL(sourceURL) else {
+        throw VideoDownloadError.unsupportedURL
+      }
       inputURL = sourceURL.absoluteString
       downloadAndCopy()
     } catch {
-      state = .failure("The Firefox button sent an invalid Reddit video link.")
+      state = .failure("The Firefox button sent an invalid Reddit or X video link.")
     }
   }
 
@@ -210,13 +213,5 @@ final class AppModel: ObservableObject {
       return false
     }
     return true
-  }
-
-  private func isRedditRelated(_ url: URL) -> Bool {
-    let host = url.host?.lowercased() ?? ""
-    return host == "redd.it"
-      || host.hasSuffix(".redd.it")
-      || host == "reddit.com"
-      || host.hasSuffix(".reddit.com")
   }
 }

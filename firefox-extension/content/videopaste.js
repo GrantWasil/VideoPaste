@@ -120,11 +120,15 @@
     }
 
     .vp-copy-button--error {
-      --vp-expanded-width: 126px;
+      --vp-expanded-width: 146px;
       background: rgba(190, 38, 51, 0.96) !important;
       gap: 6px !important;
       padding-right: 9px !important;
       width: var(--vp-expanded-width) !important;
+    }
+
+    .vp-copy-button.vp-copy-button--error .vp-copy-button__label {
+      max-width: 110px !important;
     }
 
     .vp-copy-button--expand-left:hover,
@@ -164,7 +168,7 @@
       }
 
       .vp-copy-button--error {
-        --vp-expanded-width: 124px;
+        --vp-expanded-width: 144px;
         padding-right: 8px !important;
         width: var(--vp-expanded-width) !important;
       }
@@ -194,11 +198,17 @@
     "reddit-video-player",
     "[data-testid='video-player']",
     "[data-testid='post-media']",
+    "[data-testid='videoPlayer']",
   ].join(",");
   const POST_SELECTOR = [
     "shreddit-post",
     "article",
     "[data-testid='post-container']",
+  ].join(",");
+  const X_MEDIA_SELECTOR = [
+    "[data-testid='tweetPhoto']",
+    "[data-testid='videoComponent']",
+    "figure",
   ].join(",");
 
   const observedRoots = new WeakSet();
@@ -375,6 +385,45 @@
     }
   }
 
+  function isXHostname(hostname) {
+    const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
+    return (
+      normalizedHostname === "x.com" ||
+      normalizedHostname.endsWith(".x.com") ||
+      normalizedHostname === "twitter.com" ||
+      normalizedHostname.endsWith(".twitter.com")
+    );
+  }
+
+  function canonicalXPostURL(value) {
+    if (!value) {
+      return null;
+    }
+
+    try {
+      const url = new URL(value, window.location.href);
+      if (
+        (url.protocol !== "https:" && url.protocol !== "http:") ||
+        !isXHostname(url.hostname)
+      ) {
+        return null;
+      }
+
+      const match = url.pathname.match(
+        /^\/(?:([a-zA-Z0-9_]{1,15})|(i\/web))\/status\/(\d+)(?:\/video\/([1-9]\d*))?(?:\/|$)/
+      );
+      if (!match) {
+        return null;
+      }
+
+      const accountPath = match[1] ?? match[2];
+      const videoPath = match[4] ? `/video/${match[4]}` : "";
+      return `https://x.com/${accountPath}/status/${match[3]}${videoPath}`;
+    } catch {
+      return null;
+    }
+  }
+
   function closestAcrossRoots(element, selector) {
     let current = element;
 
@@ -500,6 +549,91 @@
   }
 
   function findPostURL(container) {
+    if (isXHostname(window.location.hostname)) {
+      const directStatusLink = closestAcrossRoots(
+        container,
+        "a[href*='/status/']"
+      );
+      const directCandidate = canonicalXPostURL(directStatusLink?.href);
+      if (
+        directCandidate &&
+        /\/video\/[1-9]\d*$/.test(directCandidate)
+      ) {
+        return directCandidate;
+      }
+
+      const mediaContainer = closestAcrossRoots(
+        container,
+        X_MEDIA_SELECTOR
+      );
+      if (mediaContainer) {
+        const attachmentCandidates = Array.from(
+          mediaContainer.querySelectorAll("a[href*='/status/']")
+        )
+          .map((link) => canonicalXPostURL(link.href))
+          .filter(
+            (candidate) =>
+              candidate && /\/video\/[1-9]\d*$/.test(candidate)
+          );
+        const uniqueAttachmentCandidates = [
+          ...new Set(attachmentCandidates),
+        ];
+        if (uniqueAttachmentCandidates.length === 1) {
+          return uniqueAttachmentCandidates[0];
+        }
+      }
+      if (directCandidate) {
+        return directCandidate;
+      }
+
+      const post = closestAcrossRoots(
+        container,
+        "article[data-testid='tweet'], article"
+      );
+      if (post) {
+        const statusLinks = Array.from(
+          post.querySelectorAll("a[href*='/status/']")
+        );
+        const currentCandidate = canonicalXPostURL(
+          window.location.href
+        );
+        if (
+          currentCandidate &&
+          /\/video\/[1-9]\d*$/.test(currentCandidate)
+        ) {
+          const currentStatusID =
+            currentCandidate.match(/\/status\/(\d+)/)?.[1];
+          const timestampLink = statusLinks.find((link) =>
+            link.querySelector("time")
+          );
+          const articleCandidate = canonicalXPostURL(
+            timestampLink?.href
+          );
+          const articleMatchesCurrentPost =
+            articleCandidate?.match(/\/status\/(\d+)/)?.[1] ===
+            currentStatusID;
+          if (articleMatchesCurrentPost) {
+            return currentCandidate;
+          }
+        }
+
+        statusLinks.sort(
+          (left, right) =>
+            Number(Boolean(right.querySelector("time"))) -
+            Number(Boolean(left.querySelector("time")))
+        );
+
+        for (const link of statusLinks) {
+          const candidate = canonicalXPostURL(link.href);
+          if (candidate) {
+            return candidate;
+          }
+        }
+      }
+
+      return canonicalXPostURL(window.location.href);
+    }
+
     const post = closestAcrossRoots(container, POST_SELECTOR);
 
     if (post) {
@@ -527,6 +661,10 @@
   }
 
   function chooseSourceURL(container) {
+    if (isXHostname(window.location.hostname)) {
+      return findPostURL(container);
+    }
+
     const directURL = findDirectMediaURL(container);
 
     if (directURL) {
@@ -583,13 +721,39 @@
     }, resetDelay);
   }
 
+  function errorFeedbackMessage(message) {
+    const normalizedMessage = String(message ?? "").toLowerCase();
+
+    if (/\b(private|protected)\b/.test(normalizedMessage)) {
+      return "Private post";
+    }
+    if (
+      /\b(no|without)\b.*\bvideo\b/.test(normalizedMessage) ||
+      /\bdoes(?: not|n't|n’t) (?:contain|have)\b.*\bvideo\b/.test(
+        normalizedMessage
+      ) ||
+      /\bunsupported\b.*\bvideo\b/.test(normalizedMessage)
+    ) {
+      return "No video";
+    }
+    if (
+      /\b(unavailable|deleted)\b/.test(normalizedMessage) ||
+      /\bnot found\b/.test(normalizedMessage) ||
+      /\bdoes not exist\b/.test(normalizedMessage)
+    ) {
+      return "Unavailable";
+    }
+
+    return "Try again";
+  }
+
   function makeButton(container) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = BUTTON_CLASS;
     button.setAttribute(
       "aria-label",
-      "Click to download and copy this Reddit video, or drag to reposition"
+      "Click to download and copy this video, or drag to reposition"
     );
     button.title =
       "Click to copy the video, or drag this control to reposition it";
@@ -620,7 +784,21 @@
 
       const sourceURL = chooseSourceURL(container);
       if (!sourceURL) {
-        showFeedback(button, "Open post first", "vp-copy-button--error");
+        if (isXHostname(window.location.hostname)) {
+          button.title =
+            "VideoPaste couldn't identify a public X post for this video.";
+          showFeedback(
+            button,
+            "Post unavailable",
+            "vp-copy-button--error"
+          );
+        } else {
+          showFeedback(
+            button,
+            "Open post first",
+            "vp-copy-button--error"
+          );
+        }
         return;
       }
 
@@ -652,7 +830,12 @@
       } catch (error) {
         button.title =
           error?.message ?? "The video could not be copied.";
-        showFeedback(button, "Try again", "vp-copy-button--error", 3200);
+        showFeedback(
+          button,
+          errorFeedbackMessage(error?.message),
+          "vp-copy-button--error",
+          3200
+        );
       } finally {
         button.disabled = false;
         delete button.dataset.vpBusy;

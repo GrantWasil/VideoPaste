@@ -1,6 +1,6 @@
 # Contributing to VideoPaste
 
-Thanks for helping make Reddit videos easier to share.
+Thanks for helping make videos from Reddit and X/Twitter easier to share.
 
 ## Before opening a pull request
 
@@ -46,7 +46,8 @@ short recordings are appreciated for visible interface changes.
 Please include:
 
 - macOS and Firefox versions
-- Whether the link was a direct media URL or Reddit post URL
+- Whether the link was a direct media URL, Reddit post, or X/Twitter post
+- For X/Twitter, whether the post was public and accessible without signing in
 - Whether `yt-dlp` is installed
 - The exact error shown by VideoPaste
 
