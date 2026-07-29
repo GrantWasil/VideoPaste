@@ -4,10 +4,22 @@ VideoPaste is designed to work locally and does not operate a cloud service.
 
 ## Data VideoPaste handles
 
+On supported Reddit, X, and Twitter pages, the browser extension locally
+inspects the current page URL, links, and video elements to identify supported
+video players and add its **Copy video** control. This page information is not
+retained or sent to the project maintainer.
+
 When you request a download, VideoPaste receives the supported Reddit,
 X/Twitter, or direct-media URL you selected. It downloads the resulting media
-to `~/Downloads/VideoPaste`, records the five most recent local file paths on
-your Mac, and places the selected file on the macOS clipboard.
+to `~/Downloads/VideoPaste`, places the selected file on the macOS clipboard,
+and keeps metadata for up to five recent downloads on your Mac. Each recent
+entry contains the local file path, byte count, and download time.
+
+Downloaded files remain in `~/Downloads/VideoPaste` until you delete or move
+them. Recent-entry metadata remains in VideoPaste's local Application Support
+data until a newer entry displaces it, you remove it from Recents, or you
+delete the app's data. Using VideoPaste's Trash control moves the downloaded
+file to the macOS Trash and removes its recent entry.
 
 ## Network requests
 
@@ -26,17 +38,34 @@ history, or downloaded files to the project maintainer.
 
 ## Browser permissions
 
+The extensions run only on supported Reddit, X, and Twitter pages. Their site
+access is used to identify video players, add the user-facing control, and
+derive the selected post or media URL. They do not keep a browsing-history
+database.
+
 The Firefox and Chrome extensions use `nativeMessaging` only after you click
-their **Copy video** button. They send the selected Reddit or X/Twitter post
-URL or embedded media URL and a download command to the local VideoPaste
-helper. The helper accepts supported URLs on Reddit, `redd.it`, `x.com`, and
+their **Copy video** button. They send the selected Reddit or X/Twitter post URL
+or embedded media URL and a download command to the local VideoPaste helper.
+The helper accepts supported URLs on Reddit, `redd.it`, `x.com`, and
 `twitter.com` domains and rejects other browser requests. VideoPaste does not
-read browser cookies or use them to sign in to X.
+read browser cookies or use them to sign in to X. It disables external
+configuration and cookie inputs when it runs `yt-dlp`, so a user's local
+`yt-dlp` settings cannot add browser authentication.
 
 Mozilla treats data sent to a native application as transmission outside the
 extension, even though VideoPaste's helper is local. The extension therefore
 declares `browsingActivity` and `websiteContent` in its Firefox data-collection
 permissions. The project maintainer does not receive this data.
+
+## Chrome Web Store Limited Use
+
+VideoPaste's use of information received from browser pages complies with the
+[Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/limited-use/),
+including its Limited Use requirements. VideoPaste uses page content and URLs
+only to provide its disclosed video-copying feature. It does not sell this
+information, use it for advertising or creditworthiness, transfer it for
+unrelated purposes, or make it available for human review by the project
+maintainer.
 
 ## Third-party services
 

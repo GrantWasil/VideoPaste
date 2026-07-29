@@ -30,7 +30,16 @@ mkdir -p \
   "$STAGING_DIR/content" \
   "$STAGING_DIR/icons"
 cp "$EXTENSION_DIR/README.md" "$STAGING_DIR/README.md"
-cp "$EXTENSION_DIR/manifest.json" "$STAGING_DIR/manifest.json"
+node -e '
+  const fs = require("node:fs");
+  const [sourcePath, outputPath] = process.argv.slice(1);
+  const manifest = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
+
+  delete manifest.key;
+  fs.writeFileSync(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
+' \
+  "$EXTENSION_DIR/manifest.json" \
+  "$STAGING_DIR/manifest.json"
 cp "$EXTENSION_DIR/background/native-bridge.js" "$STAGING_DIR/background/"
 cp "$EXTENSION_DIR/content/runtime.js" "$STAGING_DIR/content/"
 cp "$EXTENSION_DIR/content/videopaste.css" "$STAGING_DIR/content/"

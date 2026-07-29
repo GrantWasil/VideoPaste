@@ -8,6 +8,9 @@
   <a href="https://github.com/GrantWasil/VideoPaste/releases/download/v0.1.0/videopaste-firefox-0.1.0.xpi">
     <img src="https://img.shields.io/badge/Firefox-Install%20Extension-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Install VideoPaste for Firefox">
   </a>
+  <a href="https://chromewebstore.google.com/detail/imfheadlgpfgpaiemfciehhbjkbhmjfl">
+    <img src="https://img.shields.io/badge/Chrome%20Web%20Store-Pending%20Review-4285F4?style=for-the-badge" alt="VideoPaste for Chrome is pending Chrome Web Store review">
+  </a>
 </p>
 
 <p align="center">
@@ -21,8 +24,10 @@
 </p>
 
 > [!NOTE]
-> VideoPaste for macOS and Chrome are currently source-distributed public
-> betas. Firefox releases that include a Mozilla-signed XPI install
+> VideoPaste for macOS remains a source-distributed public beta. The
+> [Chrome Web Store submission](https://chromewebstore.google.com/detail/imfheadlgpfgpaiemfciehhbjkbhmjfl)
+> is pending review, so Chrome users must use the source build until Google
+> publishes it. Firefox releases that include a Mozilla-signed XPI install
 > persistently; development builds loaded through `about:debugging` remain
 > temporary.
 
@@ -178,6 +183,9 @@ Build and package artifacts:
 
 Firefox signing and release-owner setup is documented in
 [`docs/firefox-release.md`](docs/firefox-release.md).
+Chrome Web Store packaging, privacy, native-host identity, listing, and review
+steps are documented in
+[`docs/chrome-web-store-release.md`](docs/chrome-web-store-release.md).
 
 The optional live Swift test reads a current video URL from
 `REDDIT_SAMPLE_URL`.
@@ -197,3 +205,7 @@ VideoPaste is an independent, unofficial project. It is not affiliated with,
 endorsed by, or sponsored by Reddit, X Corp., Signal, Mozilla, Google, or Apple.
 Reddit, X, Twitter, and other product names are trademarks of their respective
 owners.
+
+Use VideoPaste only to download media you own or are authorized to download.
+VideoPaste does not use browser cookies or bypass private posts, sign-in
+requirements, paywalls, DRM, or other access controls.

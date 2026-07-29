@@ -124,7 +124,7 @@ final class VideoDownloaderTests: XCTestCase {
     )
   }
 
-  func testYTDLPArgumentsLimitMultiVideoPostsToOneItem() throws {
+  func testYTDLPArgumentsDisableCookiesAndLimitMultiVideoPostsToOneItem() throws {
     let sourceURL = try XCTUnwrap(
       URL(string: "https://x.com/videopaste/status/1800000000000000000")
     )
@@ -135,8 +135,15 @@ final class VideoDownloaderTests: XCTestCase {
     )
 
     XCTAssertEqual(
-      Array(arguments.prefix(4)),
-      ["--no-playlist", "--playlist-items", "1", "--no-progress"]
+      Array(arguments.prefix(7)),
+      [
+        "--ignore-config",
+        "--no-cookies",
+        "--no-cookies-from-browser",
+        "--no-playlist",
+        "--playlist-items", "1",
+        "--no-progress",
+      ]
     )
     XCTAssertEqual(arguments.last, sourceURL.absoluteString)
   }

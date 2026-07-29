@@ -34,7 +34,27 @@ unzip -Z1 "$FIRST_PACKAGE" | LC_ALL=C sort > "$TEST_DIR/actual-files.txt"
 cmp "$TEST_DIR/expected-files.txt" "$TEST_DIR/actual-files.txt"
 
 unzip -p "$FIRST_PACKAGE" manifest.json > "$TEST_DIR/packaged-manifest.json"
-cmp \
+node -e '
+  const assert = require("node:assert/strict");
+  const fs = require("node:fs");
+  const [sourcePath, packagedPath] = process.argv.slice(1);
+  const sourceManifest = JSON.parse(fs.readFileSync(sourcePath, "utf8"));
+  const packagedManifest = JSON.parse(fs.readFileSync(packagedPath, "utf8"));
+
+  assert.equal(
+    Object.hasOwn(sourceManifest, "key"),
+    true,
+    "The unpacked development manifest must retain its stable-ID key."
+  );
+  assert.equal(
+    Object.hasOwn(packagedManifest, "key"),
+    false,
+    "Chrome Web Store packages must omit the development-only key field."
+  );
+
+  delete sourceManifest.key;
+  assert.deepEqual(packagedManifest, sourceManifest);
+' \
   "$PROJECT_DIR/chrome-extension/manifest.json" \
   "$TEST_DIR/packaged-manifest.json"
 

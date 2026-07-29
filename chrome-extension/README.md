@@ -27,10 +27,13 @@ Then:
 5. Refresh any open Reddit, X, or Twitter tabs.
 
 The source build has the stable Chrome extension ID
-`okkpnnbniecihdbgfndcnknjeoajbhnf`, which is authorized by the native-host
-installer. Before a Chrome Web Store release, replace the development key with
-the reserved store item's public key and update the installer allowlist to the
-resulting ID.
+`okkpnnbniecihdbgfndcnknjeoajbhnf`. The
+[Chrome Web Store item](https://chromewebstore.google.com/detail/imfheadlgpfgpaiemfciehhbjkbhmjfl)
+has ID `imfheadlgpfgpaiemfciehhbjkbhmjfl` and is pending review. The native-host
+installer authorizes both exact IDs so Store and unpacked builds can use the
+same local helper. The packaging script removes the development-only `key`
+field from the upload ZIP so it cannot conflict with the Store-assigned item
+identity.
 
 X support is limited to public video posts that `yt-dlp` can reach without an
 account or browser cookies.
@@ -45,7 +48,8 @@ From the project root:
 
 This writes `dist/videopaste-chrome.zip`. The native helper is packaged inside
 `dist/VideoPaste.app` and registered separately by the install script. The ZIP
-is deterministic and contains only the explicitly allowlisted extension files.
+is deterministic, omits the development-only manifest key, and contains only
+the explicitly allowlisted extension files.
 
 ## Test
 
