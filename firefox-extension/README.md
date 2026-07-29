@@ -9,7 +9,8 @@ the VideoPaste app window.
 ## Install a signed release
 
 Install `yt-dlp`, which is required for X/Twitter and Reddit post URLs, then
-build and register the native app from the project root:
+build the app and register its native helper for Firefox and Chrome from the
+project root:
 
 ```sh
 brew install yt-dlp

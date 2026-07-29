@@ -8,7 +8,7 @@ private enum NativeHostError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .unsupportedAction:
-      return "Firefox requested an unsupported action."
+      return "The browser requested an unsupported action."
     case .unsupportedHost:
       return "The helper only accepts Reddit and X video post links."
     }

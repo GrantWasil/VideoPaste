@@ -36,9 +36,9 @@ public enum NativeMessageError: LocalizedError {
   public var errorDescription: String? {
     switch self {
     case .incompleteMessage:
-      return "Firefox sent an incomplete native message."
+      return "The browser sent an incomplete native message."
     case .messageTooLarge:
-      return "Firefox sent a native message that was too large."
+      return "The browser sent a native message that was too large."
     }
   }
 }

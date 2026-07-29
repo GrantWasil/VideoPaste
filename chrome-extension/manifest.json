@@ -2,31 +2,20 @@
   "manifest_version": 3,
   "name": "VideoPaste",
   "version": "0.1.1",
+  "minimum_chrome_version": "105",
   "description": "Sends a Reddit or X video URL you choose to the local VideoPaste helper so it can download and copy the video.",
-  "homepage_url": "https://github.com/GrantWasil/VideoPaste",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqEhKn1u22paI/yMBsPeDpglhg8kgkf6+hw1jDCZ5nyQmDhKB2unkQOetoeLkd5diR2I4PRVAaIVrW0aRlusA0eQF5XMFhrTsTM40TaVCFiSf/p5VZ3CpwE1jzhonugz82q5/7IwPpckGSs4eSXdFoqWZpA3DalZHEjtKB2+mQIgvG2v8WqjTqdES++RTFFVW5De0V7NwsOpV7hG7BlVg2ei5IdImnOTAeMSOje2a9lzAuIKhX8gqt36BZPT+Qi90W3R24fJ+UcTwlgukUDQidb5ARCD6CgdvYXG2dEnOw9amSkTD6UAVeCeEkoDNBTMTswKNs+w37ZuthL7qVZKLyQIDAQAB",
   "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
-    "96": "icons/icon-96.png"
-  },
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "videopaste@grantwasil",
-      "strict_min_version": "140.0",
-      "data_collection_permissions": {
-        "required": [
-          "browsingActivity",
-          "websiteContent"
-        ]
-      }
-    }
+    "128": "icons/icon-128.png"
   },
   "permissions": [
     "nativeMessaging"
   ],
   "background": {
-    "scripts": [
-      "background/native-bridge.js"
-    ]
+    "service_worker": "background/native-bridge.js"
   },
   "content_scripts": [
     {

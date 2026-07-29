@@ -15,15 +15,16 @@
 </p>
 
 <p align="center">
-  A lightweight, local-first macOS app and Firefox extension that turns a
-  supported Reddit or public X/Twitter video post into an MP4 on your
+  A lightweight, local-first macOS app with Firefox and Chrome extensions that
+  turns a supported Reddit or public X/Twitter video post into an MP4 on your
   clipboard.
 </p>
 
 > [!NOTE]
-> VideoPaste for macOS is currently a source-distributed public beta. Firefox
-> releases that include a Mozilla-signed XPI install persistently; development
-> builds loaded through `about:debugging` remain temporary.
+> VideoPaste for macOS and Chrome are currently source-distributed public
+> betas. Firefox releases that include a Mozilla-signed XPI install
+> persistently; development builds loaded through `about:debugging` remain
+> temporary.
 
 <img width="800" height="789" alt="CleanShot 2026-07-24 at 20 44 02" src="https://github.com/user-attachments/assets/4de203eb-8f66-40ca-a5c8-3a6229e09276" />
 
@@ -37,7 +38,7 @@ Discord, or another app.
 
 ## Features
 
-- **One-click Firefox button** — hover the compact **V** on a supported Reddit
+- **One-click browser button** — hover the compact **V** on a supported Reddit
   video or public X/Twitter video post and click to download and copy it.
 - **Draggable overlay** — move the button anywhere within the video so it never
   blocks something you want to see.
@@ -53,7 +54,7 @@ Downloaded videos remain in `~/Downloads/VideoPaste`.
 ## Requirements
 
 - macOS 13 Ventura or newer
-- Firefox 140 or newer for the browser extension
+- Firefox 140 or newer, or Chrome 105 or newer, for the browser extension
 - Swift 6.2 or newer when building from source
 - [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) for Reddit post URLs and
   X/Twitter posts
@@ -93,9 +94,11 @@ helper. Build and register those components:
 The self-distributed extension does not update automatically. Repeat the XPI
 installation with each newer release.
 
-## Install a development build
+## Install browser development builds
 
 Build and register the native app as above, then:
+
+### Firefox
 
 1. Open `about:debugging` in Firefox.
 2. Choose **This Firefox**.
@@ -106,9 +109,19 @@ Build and register the native app as above, then:
 Development builds remain installed only until Firefox restarts. Reload the
 same manifest to continue testing; use a release XPI for persistent use.
 
+### Chrome
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode**.
+3. Choose **Load unpacked** and select the `chrome-extension` directory.
+4. Refresh any open Reddit, X, or Twitter tabs.
+
+Reload the unpacked extension from `chrome://extensions` after changing its
+source files.
+
 ## Use it
 
-### From Firefox
+### From Firefox or Chrome
 
 1. Open a supported Reddit video or a public X/Twitter post containing video.
 2. Click the orange **V** on the video. You can drag it somewhere else first.
@@ -132,7 +145,7 @@ sign-in-restricted posts, and posts without video cannot be downloaded.
 
 | Component | Responsibility |
 | --- | --- |
-| Firefox extension | Finds supported Reddit and X/Twitter videos and provides the draggable copy button |
+| Browser extensions | Find supported Reddit and X/Twitter videos and provide the draggable copy button |
 | Native messaging host | Downloads and copies the MP4 without showing an app window |
 | macOS app | Provides the standalone UI, menu-bar mode, and recent downloads |
 
@@ -148,6 +161,11 @@ swift format lint --recursive --strict Sources Tests Package.swift
 cd firefox-extension
 npm install
 npm test
+
+cd ../chrome-extension
+npm install
+npm test
+cd ..
 ```
 
 Build and package artifacts:
@@ -155,6 +173,7 @@ Build and package artifacts:
 ```sh
 ./scripts/build-app.sh
 ./scripts/package-firefox-extension.sh
+./scripts/package-chrome-extension.sh
 ```
 
 Firefox signing and release-owner setup is documented in
@@ -175,5 +194,6 @@ VideoPaste is available under the [MIT License](LICENSE).
 ## Disclaimer
 
 VideoPaste is an independent, unofficial project. It is not affiliated with,
-endorsed by, or sponsored by Reddit, X Corp., Signal, Mozilla, or Apple. Reddit,
-X, Twitter, and other product names are trademarks of their respective owners.
+endorsed by, or sponsored by Reddit, X Corp., Signal, Mozilla, Google, or Apple.
+Reddit, X, Twitter, and other product names are trademarks of their respective
+owners.

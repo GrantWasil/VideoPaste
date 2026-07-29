@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
-async function run() {
+async function run(runtimeNamespace) {
   const browser = await chromium.launch({ headless: true });
 
   try {
@@ -17,25 +17,74 @@ async function run() {
         </div>
       </article>
     `);
-    await page.evaluate(() => {
+    await page.evaluate((runtimeNamespace) => {
       window.__vpNativeMessages = [];
       window.__vpNativeResolvers = [];
-      window.browser = {
+      if (runtimeNamespace === "browser") {
+        window.browser = {
+          runtime: {
+            sendMessage(message) {
+              window.__vpNativeMessages.push(message);
+              return new Promise((resolve) => {
+                window.__vpNativeResolvers.push(resolve);
+              });
+            },
+          },
+        };
+        return;
+      }
+
+      window.chrome = {
         runtime: {
-          sendMessage(message) {
-            window.__vpNativeMessages.push(message);
-            return new Promise((resolve) => {
-              window.__vpNativeResolvers.push(resolve);
-            });
+          connect() {
+            const messageListeners = [];
+            const disconnectListeners = [];
+            let disconnected = false;
+
+            return {
+              onMessage: {
+                addListener(listener) {
+                  messageListeners.push(listener);
+                },
+              },
+              onDisconnect: {
+                addListener(listener) {
+                  disconnectListeners.push(listener);
+                },
+              },
+              disconnect() {
+                if (disconnected) {
+                  return;
+                }
+                disconnected = true;
+                disconnectListeners.forEach((listener) => listener());
+              },
+              postMessage(message) {
+                window.__vpNativeMessages.push(message);
+                window.__vpNativeResolvers.push((response) => {
+                  messageListeners.forEach((listener) =>
+                    listener(response)
+                  );
+                });
+              },
+            };
           },
         },
       };
-    });
+    }, runtimeNamespace);
 
     await page.addStyleTag({
       path: path.resolve(
         __dirname,
         "../content/videopaste.css"
+      ),
+    });
+    await page.addScriptTag({
+      path: path.resolve(
+        __dirname,
+        runtimeNamespace === "browser"
+          ? "../content/runtime.js"
+          : "../../chrome-extension/content/runtime.js"
       ),
     });
     await page.addScriptTag({
@@ -304,14 +353,16 @@ async function run() {
       true,
       "The expanded shadow-DOM control must remain inside the video"
     );
+    await page.close();
   } finally {
     await browser.close();
   }
 }
 
-run()
+run("browser")
+  .then(() => run("chrome"))
   .then(() => {
-    console.log("Firefox overlay DOM test passed.");
+    console.log("Cross-browser overlay DOM tests passed.");
   })
   .catch((error) => {
     console.error(error);
