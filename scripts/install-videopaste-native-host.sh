@@ -6,7 +6,15 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH="${1:-$PROJECT_DIR/dist/VideoPaste.app}"
 HOST_PATH="$APP_PATH/Contents/MacOS/VideoPasteNativeHost"
 HOST_NAME="com.grantwasil.videopaste"
-CHROME_EXTENSION_ID="${2:-okkpnnbniecihdbgfndcnknjeoajbhnf}"
+CHROME_STORE_EXTENSION_ID="imfheadlgpfgpaiemfciehhbjkbhmjfl"
+CHROME_DEVELOPMENT_EXTENSION_ID="okkpnnbniecihdbgfndcnknjeoajbhnf"
+CHROME_EXTENSION_IDS=(
+  "$CHROME_STORE_EXTENSION_ID"
+  "$CHROME_DEVELOPMENT_EXTENSION_ID"
+)
+if (( $# > 1 )); then
+  CHROME_EXTENSION_IDS=("${@:2}")
+fi
 APPLICATION_SUPPORT_DIR="${VIDEOPASTE_APPLICATION_SUPPORT_DIR:-$HOME/Library/Application Support}"
 FIREFOX_MANIFEST_DIR="$APPLICATION_SUPPORT_DIR/Mozilla/NativeMessagingHosts"
 FIREFOX_MANIFEST_PATH="$FIREFOX_MANIFEST_DIR/$HOST_NAME.json"
@@ -34,10 +42,20 @@ if [[ ! -x "$HOST_PATH" ]]; then
 fi
 HOST_PATH="$(cd "$(dirname "$HOST_PATH")" && pwd)/$(basename "$HOST_PATH")"
 
-if [[ ! "$CHROME_EXTENSION_ID" =~ ^[a-p]{32}$ ]]; then
-  echo "Chrome extension ID must contain 32 letters from a through p." >&2
-  exit 1
-fi
+for chrome_extension_id in "${CHROME_EXTENSION_IDS[@]}"; do
+  if [[ ! "$chrome_extension_id" =~ ^[a-p]{32}$ ]]; then
+    echo "Chrome extension ID must contain 32 letters from a through p." >&2
+    exit 1
+  fi
+done
+
+chrome_allowed_origins_json="["
+chrome_allowed_origins_separator=""
+for chrome_extension_id in "${CHROME_EXTENSION_IDS[@]}"; do
+  chrome_allowed_origins_json+="$chrome_allowed_origins_separator\"chrome-extension://$chrome_extension_id/\""
+  chrome_allowed_origins_separator=","
+done
+chrome_allowed_origins_json+="]"
 
 create_manifest() {
   local manifest_path="$1"
@@ -69,7 +87,7 @@ for product_dir in "${CHROME_PRODUCT_DIRS[@]}"; do
   TEMP_MANIFEST="$(/usr/bin/mktemp "/tmp/videopaste-chrome-host.XXXXXX")"
   create_manifest "$TEMP_MANIFEST"
   /usr/bin/plutil -insert allowed_origins \
-    -json "[\"chrome-extension://$CHROME_EXTENSION_ID/\"]" \
+    -json "$chrome_allowed_origins_json" \
     "$TEMP_MANIFEST"
   /usr/bin/plutil -convert json "$TEMP_MANIFEST"
   /bin/mv "$TEMP_MANIFEST" "$manifest_path"

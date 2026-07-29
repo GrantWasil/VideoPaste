@@ -80,10 +80,42 @@ try {
   assert.equal("allowed_origins" in firefoxManifest, false);
   for (const chromeManifest of chromeManifests) {
     assert.deepEqual(chromeManifest.allowed_origins, [
+      "chrome-extension://imfheadlgpfgpaiemfciehhbjkbhmjfl/",
       "chrome-extension://okkpnnbniecihdbgfndcnknjeoajbhnf/",
     ]);
     assert.equal("allowed_extensions" in chromeManifest, false);
   }
+
+  const overrideApplicationSupportPath = path.join(
+    temporaryRoot,
+    "Override Application Support"
+  );
+  const overrideExtensionID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const overrideResult = spawnSync(
+    "zsh",
+    [installerPath, appPath, overrideExtensionID],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        VIDEOPASTE_APPLICATION_SUPPORT_DIR:
+          overrideApplicationSupportPath,
+      },
+    }
+  );
+  assert.equal(overrideResult.status, 0, overrideResult.stderr);
+  const overrideChromeManifest = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        overrideApplicationSupportPath,
+        "Google/Chrome/NativeMessagingHosts/com.grantwasil.videopaste.json"
+      ),
+      "utf8"
+    )
+  );
+  assert.deepEqual(overrideChromeManifest.allowed_origins, [
+    `chrome-extension://${overrideExtensionID}/`,
+  ]);
 
   const relativeApplicationSupportPath = path.join(
     temporaryRoot,

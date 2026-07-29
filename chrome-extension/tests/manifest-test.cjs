@@ -8,6 +8,12 @@ const firefoxRoot = path.resolve(extensionRoot, "../firefox-extension");
 const manifest = JSON.parse(
   fs.readFileSync(path.join(extensionRoot, "manifest.json"), "utf8")
 );
+const packageMetadata = JSON.parse(
+  fs.readFileSync(path.join(extensionRoot, "package.json"), "utf8")
+);
+const packageLock = JSON.parse(
+  fs.readFileSync(path.join(extensionRoot, "package-lock.json"), "utf8")
+);
 const firefoxManifest = JSON.parse(
   fs.readFileSync(path.join(firefoxRoot, "manifest.json"), "utf8")
 );
@@ -32,9 +38,24 @@ assert.deepEqual(manifest.background, {
 assert.deepEqual(manifest.permissions, ["nativeMessaging"]);
 assert.equal("browser_specific_settings" in manifest, false);
 assert.deepEqual(manifest.content_scripts, firefoxManifest.content_scripts);
-for (const field of ["name", "version", "description"]) {
+for (const field of ["name", "description"]) {
   assert.equal(manifest[field], firefoxManifest[field]);
 }
+assert.equal(
+  manifest.version,
+  packageMetadata.version,
+  "Chrome manifest.json and package.json versions must stay in sync"
+);
+assert.equal(
+  packageLock.version,
+  packageMetadata.version,
+  "Chrome package-lock.json and package.json versions must stay in sync"
+);
+assert.equal(
+  packageLock.packages[""].version,
+  packageMetadata.version,
+  "Chrome package-lock root package version must stay in sync"
+);
 assert.equal(
   chromeExtensionID(manifest.key),
   "okkpnnbniecihdbgfndcnknjeoajbhnf"

@@ -211,6 +211,10 @@ public enum VideoDownloader {
     outputTemplate: String
   ) -> [String] {
     [
+      // Keep downloads public-only even when the user has a yt-dlp config.
+      "--ignore-config",
+      "--no-cookies",
+      "--no-cookies-from-browser",
       "--no-playlist",
       // X multi-video posts can still expand without an explicit item cap.
       "--playlist-items", "1",
