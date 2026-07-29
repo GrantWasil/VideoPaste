@@ -26,12 +26,12 @@ history, or downloaded files to the project maintainer.
 
 ## Browser permissions
 
-The Firefox extension uses `nativeMessaging` only after you click its
-**Copy video** button. It sends the selected Reddit or X/Twitter post URL or
-embedded media URL and a download command to the local VideoPaste helper. The
-helper accepts supported URLs on Reddit, `redd.it`, `x.com`, and `twitter.com`
-domains and rejects other browser requests. VideoPaste does not read Firefox
-cookies or use them to sign in to X.
+The Firefox and Chrome extensions use `nativeMessaging` only after you click
+their **Copy video** button. They send the selected Reddit or X/Twitter post
+URL or embedded media URL and a download command to the local VideoPaste
+helper. The helper accepts supported URLs on Reddit, `redd.it`, `x.com`, and
+`twitter.com` domains and rejects other browser requests. VideoPaste does not
+read browser cookies or use them to sign in to X.
 
 Mozilla treats data sent to a native application as transmission outside the
 extension, even though VideoPaste's helper is local. The extension therefore

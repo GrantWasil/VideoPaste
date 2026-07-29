@@ -76,7 +76,7 @@ final class AppModel: ObservableObject {
       inputURL = sourceURL.absoluteString
       downloadAndCopy()
     } catch {
-      state = .failure("The Firefox button sent an invalid Reddit or X video link.")
+      state = .failure("The browser button sent an invalid Reddit or X video link.")
     }
   }
 

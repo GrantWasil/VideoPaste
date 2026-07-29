@@ -17,13 +17,19 @@ swift format lint --recursive --strict Sources Tests Package.swift
 ./scripts/build-app.sh
 ```
 
-## Firefox extension
+## Browser extensions
 
 ```sh
 cd firefox-extension
 npm install
+npx playwright install chromium
 npm test
 npm run lint:addon
+
+cd ../chrome-extension
+npm install
+npx playwright install chromium
+npm test
 ```
 
 After building the app, also run:
@@ -45,7 +51,7 @@ short recordings are appreciated for visible interface changes.
 
 Please include:
 
-- macOS and Firefox versions
+- macOS and browser versions
 - Whether the link was a direct media URL, Reddit post, or X/Twitter post
 - For X/Twitter, whether the post was public and accessible without signing in
 - Whether `yt-dlp` is installed

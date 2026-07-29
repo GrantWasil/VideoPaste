@@ -16,7 +16,9 @@ browser.runtime.onMessage.addListener((message) => {
       if (!response?.ok) {
         return {
           ok: false,
-          error: response?.error ?? "The native helper could not copy the video.",
+          error:
+            response?.error ??
+            "The native helper could not copy the video.",
         };
       }
       return response;
@@ -25,6 +27,6 @@ browser.runtime.onMessage.addListener((message) => {
       ok: false,
       error:
         error?.message ??
-        "Firefox could not reach the VideoPaste helper.",
+        "The browser could not reach the VideoPaste helper.",
     }));
 });

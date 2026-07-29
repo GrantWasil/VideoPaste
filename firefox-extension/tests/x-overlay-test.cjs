@@ -3,6 +3,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
 
+const runtimeNamespace =
+  process.env.VIDEOPASTE_TEST_RUNTIME === "chrome"
+    ? "chrome"
+    : "browser";
+const extensionRoot =
+  runtimeNamespace === "chrome"
+    ? path.resolve(__dirname, "../../chrome-extension")
+    : path.resolve(__dirname, "..");
+
 async function openFixture(browser, url, markup) {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -13,25 +22,69 @@ async function openFixture(browser, url, markup) {
     })
   );
   await page.goto(url);
-  await page.evaluate(() => {
+  await page.evaluate((runtimeNamespace) => {
     window.__vpNativeMessages = [];
     window.__vpNativeResolvers = [];
-    window.browser = {
+    if (runtimeNamespace === "browser") {
+      window.browser = {
+        runtime: {
+          sendMessage(message) {
+            window.__vpNativeMessages.push(message);
+            return new Promise((resolve) => {
+              window.__vpNativeResolvers.push(resolve);
+            });
+          },
+        },
+      };
+      return;
+    }
+
+    window.chrome = {
       runtime: {
-        sendMessage(message) {
-          window.__vpNativeMessages.push(message);
-          return new Promise((resolve) => {
-            window.__vpNativeResolvers.push(resolve);
-          });
+        connect() {
+          const messageListeners = [];
+          const disconnectListeners = [];
+          let disconnected = false;
+
+          return {
+            onMessage: {
+              addListener(listener) {
+                messageListeners.push(listener);
+              },
+            },
+            onDisconnect: {
+              addListener(listener) {
+                disconnectListeners.push(listener);
+              },
+            },
+            disconnect() {
+              if (disconnected) {
+                return;
+              }
+              disconnected = true;
+              disconnectListeners.forEach((listener) => listener());
+            },
+            postMessage(message) {
+              window.__vpNativeMessages.push(message);
+              window.__vpNativeResolvers.push((response) => {
+                messageListeners.forEach((listener) =>
+                  listener(response)
+                );
+              });
+            },
+          };
         },
       },
     };
-  });
+  }, runtimeNamespace);
   await page.addStyleTag({
-    path: path.resolve(__dirname, "../content/videopaste.css"),
+    path: path.join(extensionRoot, "content/videopaste.css"),
   });
   await page.addScriptTag({
-    path: path.resolve(__dirname, "../content/videopaste.js"),
+    path: path.join(extensionRoot, "content/runtime.js"),
+  });
+  await page.addScriptTag({
+    path: path.join(extensionRoot, "content/videopaste.js"),
   });
   return { context, page };
 }
@@ -39,7 +92,7 @@ async function openFixture(browser, url, markup) {
 async function run() {
   const manifest = JSON.parse(
     fs.readFileSync(
-      path.resolve(__dirname, "../manifest.json"),
+      path.join(extensionRoot, "manifest.json"),
       "utf8"
     )
   );
@@ -407,7 +460,11 @@ async function run() {
 
 run()
   .then(() => {
-    console.log("Firefox X overlay test passed.");
+    console.log(
+      `${
+        runtimeNamespace === "chrome" ? "Chrome" : "Firefox"
+      } X overlay test passed.`
+    );
   })
   .catch((error) => {
     console.error(error);

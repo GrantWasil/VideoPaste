@@ -1,0 +1,23 @@
+{
+  "name": "videopaste-chrome",
+  "version": "0.1.1",
+  "private": true,
+  "description": "Chrome companion extension for VideoPaste.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check content/runtime.js && node --check content/videopaste.js && node --check background/native-bridge.js",
+    "test": "npm run check && npm run test:bridge && npm run test:manifest && npm run test:native-manifests && npm run test:shared && npm run test:x && npm run test:package",
+    "test:bridge": "node tests/native-bridge-test.cjs",
+    "test:manifest": "node tests/manifest-test.cjs",
+    "test:native": "node ../firefox-extension/tests/native-host-test.cjs",
+    "test:native-manifests": "node tests/native-host-manifest-test.cjs",
+    "test:package": "../scripts/test-chrome-package.sh",
+    "test:shared": "node tests/shared-files-test.cjs",
+    "test:x": "NODE_PATH=./node_modules VIDEOPASTE_TEST_RUNTIME=chrome node ../firefox-extension/tests/x-overlay-test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}

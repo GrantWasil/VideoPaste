@@ -3,21 +3,20 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-EXTENSION_DIR="$PROJECT_DIR/firefox-extension"
-VERSION="$(node -p "require('$EXTENSION_DIR/manifest.json').version")"
-OUTPUT_ARGUMENT="${1:-$PROJECT_DIR/dist/videopaste-firefox-$VERSION.zip}"
+EXTENSION_DIR="$PROJECT_DIR/chrome-extension"
+OUTPUT_ARGUMENT="${1:-$PROJECT_DIR/dist/videopaste-chrome.zip}"
 OUTPUT_DIRECTORY="$(dirname "$OUTPUT_ARGUMENT")"
 OUTPUT_FILENAME="$(basename "$OUTPUT_ARGUMENT")"
 
 if [[ "$OUTPUT_FILENAME" != *.zip ]]; then
-  echo "Firefox package output must end in .zip: $OUTPUT_ARGUMENT" >&2
+  echo "Chrome package output must end in .zip: $OUTPUT_ARGUMENT" >&2
   exit 1
 fi
 
 mkdir -p "$OUTPUT_DIRECTORY"
 OUTPUT_DIRECTORY="$(cd "$OUTPUT_DIRECTORY" && pwd)"
 OUTPUT_PATH="$OUTPUT_DIRECTORY/$OUTPUT_FILENAME"
-STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/videopaste-firefox.XXXXXX")"
+STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/videopaste-chrome.XXXXXX")"
 FILE_LIST="$STAGING_DIR.files"
 
 cleanup() {
@@ -30,13 +29,16 @@ mkdir -p \
   "$STAGING_DIR/background" \
   "$STAGING_DIR/content" \
   "$STAGING_DIR/icons"
+cp "$EXTENSION_DIR/README.md" "$STAGING_DIR/README.md"
 cp "$EXTENSION_DIR/manifest.json" "$STAGING_DIR/manifest.json"
 cp "$EXTENSION_DIR/background/native-bridge.js" "$STAGING_DIR/background/"
-cp "$EXTENSION_DIR/content/videopaste.css" "$STAGING_DIR/content/"
 cp "$EXTENSION_DIR/content/runtime.js" "$STAGING_DIR/content/"
+cp "$EXTENSION_DIR/content/videopaste.css" "$STAGING_DIR/content/"
 cp "$EXTENSION_DIR/content/videopaste.js" "$STAGING_DIR/content/"
+cp "$EXTENSION_DIR/icons/icon-16.png" "$STAGING_DIR/icons/"
+cp "$EXTENSION_DIR/icons/icon-32.png" "$STAGING_DIR/icons/"
 cp "$EXTENSION_DIR/icons/icon-48.png" "$STAGING_DIR/icons/"
-cp "$EXTENSION_DIR/icons/icon-96.png" "$STAGING_DIR/icons/"
+cp "$EXTENSION_DIR/icons/icon-128.png" "$STAGING_DIR/icons/"
 
 # ZIP timestamps and extra attributes vary by machine unless normalized.
 export TZ=UTC
