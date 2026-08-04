@@ -120,10 +120,11 @@ struct ContentView: View {
       }
       .frame(maxWidth: .infinity)
       .padding(.vertical, 4)
+      .foregroundStyle(.white)
     }
     .buttonStyle(.borderedProminent)
     .controlSize(.large)
-    .tint(.orange)
+    .tint(VideoPasteTheme.primaryActionTint)
     .keyboardShortcut(.return, modifiers: .command)
     .disabled(
       model.isDownloading
