@@ -64,10 +64,11 @@ struct MenuBarView: View {
         Spacer()
       }
       .frame(maxWidth: .infinity)
+      .foregroundStyle(.white)
     }
     .buttonStyle(.borderedProminent)
     .controlSize(.large)
-    .tint(.orange)
+    .tint(VideoPasteTheme.primaryActionTint)
     .disabled(model.isDownloading)
   }
 
