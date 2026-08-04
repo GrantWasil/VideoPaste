@@ -16,10 +16,25 @@ and keeps metadata for up to five recent downloads on your Mac. Each recent
 entry contains the local file path, byte count, and download time.
 
 Downloaded files remain in `~/Downloads/VideoPaste` until you delete or move
-them. Recent-entry metadata remains in VideoPaste's local Application Support
-data until a newer entry displaces it, you remove it from Recents, or you
-delete the app's data. Using VideoPaste's Trash control moves the downloaded
-file to the macOS Trash and removes its recent entry.
+them, or until optional automatic cleanup moves eligible files to the macOS
+Trash. Recent-entry metadata remains in VideoPaste's local Application Support
+data until a newer entry displaces it, you remove it from Recents, automatic
+cleanup removes the corresponding file, or you delete the app's data. Using
+VideoPaste's Trash control moves the downloaded file to the macOS Trash and
+removes its recent entry.
+
+## Automatic cleanup
+
+Automatic cleanup is off by default. If you enable it, VideoPaste stores the
+enabled state, retention amount, and selected unit (hours, days, or weeks) in
+the app's local macOS preferences. These settings are not transmitted.
+
+While the menu-bar utility is running, VideoPaste checks for expired downloads
+at launch, after a download, when its menu or window opens, and periodically.
+Cleanup is limited to regular, non-symlink video files in
+`~/Downloads/VideoPaste` whose names match VideoPaste's generated download
+pattern. Eligible files are moved to the macOS Trash. VideoPaste does not empty
+Trash or permanently erase those files.
 
 ## Network requests
 

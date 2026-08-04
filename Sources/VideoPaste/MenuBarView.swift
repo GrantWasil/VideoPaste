@@ -150,10 +150,18 @@ struct MenuBarView: View {
 
   private var footer: some View {
     HStack(spacing: 12) {
-      Button("Open App") {
+      Button("Open Window") {
         openWindow(id: "main")
         NSApplication.shared.activate(ignoringOtherApps: true)
       }
+
+      Button {
+        openWindow(id: "settings")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+      } label: {
+        Image(systemName: "gearshape")
+      }
+      .help("Settings…")
 
       Button {
         model.openDownloadsFolder()
@@ -164,7 +172,7 @@ struct MenuBarView: View {
 
       Spacer()
 
-      Button("Quit") {
+      Button("Quit VideoPaste") {
         NSApplication.shared.terminate(nil)
       }
     }

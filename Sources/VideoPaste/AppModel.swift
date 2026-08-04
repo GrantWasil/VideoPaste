@@ -14,8 +14,11 @@ final class AppModel: ObservableObject {
   @Published var inputURL = ""
   @Published private(set) var state: State = .idle
   @Published private(set) var recentVideos: [RecentVideo] = []
+  @Published private(set) var cleanupStatusMessage: String?
 
+  private static let cleanupCheckInterval: TimeInterval = 15 * 60
   private var historyStore: RecentVideoStore?
+  private var cleanupTimer: Timer?
 
   init() {
     do {
@@ -26,6 +29,13 @@ final class AppModel: ObservableObject {
       historyStore = nil
       recentVideos = []
     }
+
+    runAutomaticCleanup()
+    startCleanupTimer()
+  }
+
+  deinit {
+    cleanupTimer?.invalidate()
   }
 
   var isDownloading: Bool {
@@ -106,6 +116,7 @@ final class AppModel: ObservableObject {
         try FileClipboardWriter.copy(video.fileURL)
         recordInHistory(video)
         state = .success(video)
+        runAutomaticCleanup()
       } catch {
         state = .failure(error.localizedDescription)
       }
@@ -182,6 +193,49 @@ final class AppModel: ObservableObject {
     }
   }
 
+  func performMaintenance() {
+    reloadHistory()
+    runAutomaticCleanup()
+  }
+
+  func runAutomaticCleanup() {
+    let preferences = CleanupPreferences.current()
+    guard preferences.isEnabled else {
+      return
+    }
+
+    do {
+      let directory = try VideoDownloader.defaultOutputDirectory()
+      let expiredVideos = try VideoCleanup.expiredVideoURLs(
+        in: directory,
+        olderThan: preferences.cutoffDate()
+      )
+      var movedCount = 0
+      var failedCount = 0
+
+      for videoURL in expiredVideos {
+        do {
+          _ = try FileManager.default.trashItem(
+            at: videoURL,
+            resultingItemURL: nil
+          )
+          movedCount += 1
+        } catch {
+          failedCount += 1
+        }
+      }
+
+      reloadHistory()
+      clearSuccessStateIfVideoIsMissing()
+      cleanupStatusMessage = cleanupResultMessage(
+        movedCount: movedCount,
+        failedCount: failedCount
+      )
+    } catch {
+      cleanupStatusMessage = "Cleanup couldn’t run: \(error.localizedDescription)"
+    }
+  }
+
   private func recordInHistory(_ video: DownloadedVideo) {
     guard let historyStore else {
       return
@@ -204,6 +258,57 @@ final class AppModel: ObservableObject {
     } catch {
       recentVideos.removeAll { $0.id == video.id }
     }
+  }
+
+  private func reloadHistory() {
+    do {
+      if let historyStore {
+        recentVideos = try historyStore.load()
+      } else {
+        recentVideos.removeAll {
+          !FileManager.default.fileExists(atPath: $0.fileURL.path)
+        }
+      }
+    } catch {
+      recentVideos.removeAll {
+        !FileManager.default.fileExists(atPath: $0.fileURL.path)
+      }
+    }
+  }
+
+  private func clearSuccessStateIfVideoIsMissing() {
+    guard case .success(let currentVideo) = state else {
+      return
+    }
+    guard !FileManager.default.fileExists(atPath: currentVideo.fileURL.path) else {
+      return
+    }
+    state = .idle
+  }
+
+  private func cleanupResultMessage(movedCount: Int, failedCount: Int) -> String {
+    if failedCount > 0 {
+      return "Moved \(movedCount) to Trash; couldn’t move \(failedCount)."
+    }
+    if movedCount == 1 {
+      return "Moved 1 expired video to Trash."
+    }
+    if movedCount > 1 {
+      return "Moved \(movedCount) expired videos to Trash."
+    }
+    return "No expired VideoPaste downloads found."
+  }
+
+  private func startCleanupTimer() {
+    cleanupTimer = Timer.scheduledTimer(
+      withTimeInterval: Self.cleanupCheckInterval,
+      repeats: true
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.runAutomaticCleanup()
+      }
+    }
+    cleanupTimer?.tolerance = 60
   }
 
   private func videoIsAvailable(_ video: RecentVideo) -> Bool {

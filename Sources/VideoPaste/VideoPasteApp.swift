@@ -13,6 +13,7 @@ struct VideoPasteApp: App {
           appDelegate.installExternalURLHandler { url in
             model.handleExternalDownloadRequest(url)
           }
+          model.performMaintenance()
         }
     }
     .windowResizability(.contentSize)
@@ -27,12 +28,18 @@ struct VideoPasteApp: App {
       }
     }
 
+    Window("VideoPaste Settings", id: "settings") {
+      SettingsView(model: model)
+    }
+    .windowResizability(.contentSize)
+
     MenuBarExtra("VideoPaste", systemImage: "v.square.fill") {
       MenuBarView(model: model)
         .onAppear {
           appDelegate.installExternalURLHandler { url in
             model.handleExternalDownloadRequest(url)
           }
+          model.performMaintenance()
         }
     }
     .menuBarExtraStyle(.window)
