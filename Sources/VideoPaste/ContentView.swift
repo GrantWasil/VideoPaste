@@ -207,7 +207,7 @@ struct ContentView: View {
   private var footer: some View {
     HStack {
       Image(systemName: "folder")
-      Text("Videos stay in Downloads › VideoPaste")
+      Text("Videos save to Downloads › VideoPaste")
       Spacer()
       if !model.inputURL.isEmpty && !model.isDownloading {
         Button("Clear", action: model.clear)

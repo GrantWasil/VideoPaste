@@ -66,6 +66,66 @@ final class RecentVideoStoreTests: XCTestCase {
     XCTAssertEqual(videos.first?.byteCount, 20)
   }
 
+  func testFindsOnlyExpiredVideoPasteDownloads() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let cutoffDate = Date(timeIntervalSince1970: 2_000)
+    let oldDate = Date(timeIntervalSince1970: 1_000)
+    let newDate = Date(timeIntervalSince1970: 3_000)
+    let expiredVideo = try makeVideo(
+      named: "videopaste-video-2026-01-01-000000.mp4",
+      in: directory,
+      createdAt: oldDate
+    )
+    _ = try makeVideo(
+      named: "videopaste-video-2026-01-02-000000.mp4",
+      in: directory,
+      createdAt: newDate
+    )
+    _ = try makeVideo(
+      named: "keep-my-video.mp4",
+      in: directory,
+      createdAt: oldDate
+    )
+    _ = try makeVideo(
+      named: "videopaste-video-2026-01-01-000000.txt",
+      in: directory,
+      createdAt: oldDate
+    )
+
+    let expiredURLs = try VideoCleanup.expiredVideoURLs(
+      in: directory,
+      olderThan: cutoffDate
+    )
+
+    XCTAssertEqual(
+      expiredURLs.map { $0.resolvingSymlinksInPath() },
+      [expiredVideo.resolvingSymlinksInPath()]
+    )
+  }
+
+  func testMissingCleanupDirectoryHasNoExpiredVideos() throws {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+    XCTAssertEqual(
+      try VideoCleanup.expiredVideoURLs(
+        in: directory,
+        olderThan: Date()
+      ),
+      []
+    )
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+  }
+
+  func testRetentionUnitsProduceExpectedIntervals() {
+    XCTAssertEqual(VideoRetentionUnit.hours.timeInterval(for: 2), 7_200)
+    XCTAssertEqual(VideoRetentionUnit.days.timeInterval(for: 2), 172_800)
+    XCTAssertEqual(VideoRetentionUnit.weeks.timeInterval(for: 2), 1_209_600)
+    XCTAssertEqual(VideoRetentionUnit.hours.timeInterval(for: 0), 3_600)
+  }
+
   private func makeTemporaryDirectory() throws -> URL {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -76,9 +136,22 @@ final class RecentVideoStoreTests: XCTestCase {
     return directory
   }
 
-  private func makeVideo(named name: String, in directory: URL) throws -> URL {
+  private func makeVideo(
+    named name: String,
+    in directory: URL,
+    createdAt: Date? = nil
+  ) throws -> URL {
     let fileURL = directory.appendingPathComponent(name)
     try Data([0, 1, 2, 3]).write(to: fileURL)
+    if let createdAt {
+      try FileManager.default.setAttributes(
+        [
+          .creationDate: createdAt,
+          .modificationDate: createdAt,
+        ],
+        ofItemAtPath: fileURL.path
+      )
+    }
     return fileURL
   }
 }

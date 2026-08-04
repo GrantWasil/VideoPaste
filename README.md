@@ -49,12 +49,16 @@ Discord, or another app.
   blocks something you want to see.
 - **Silent native helper** — the extension shows **Loading…** and **Copied!**
   without opening the desktop app.
-- **Menu-bar mode** — download a supported link already on your clipboard.
+- **Menu-bar utility** — stays available without occupying the Dock; closing
+  its window keeps VideoPaste running in the menu bar.
 - **Recent downloads** — quickly copy or reopen the five latest videos.
+- **Recoverable automatic cleanup** — optionally move VideoPaste downloads to
+  Trash after a user-selected number of hours, days, or weeks.
 - **Local and private** — no accounts, analytics, telemetry, or VideoPaste
   servers.
 
-Downloaded videos remain in `~/Downloads/VideoPaste`.
+Downloaded videos are saved in `~/Downloads/VideoPaste`. They remain there
+until you remove them or optional automatic cleanup moves them to Trash.
 
 ## Requirements
 
@@ -136,9 +140,24 @@ source files.
 ### From the Mac app
 
 1. Copy a supported Reddit video/post link or an X/Twitter video-post link.
-2. Open VideoPaste from the Dock or menu bar.
+2. Open VideoPaste from the menu bar.
 3. Choose **Download Link from Clipboard**.
 4. Paste the resulting MP4 with **⌘V**.
+
+Closing the VideoPaste window leaves the menu-bar utility running. To stop it
+completely, open the menu-bar utility and choose **Quit VideoPaste**.
+
+### Automatic cleanup
+
+1. Open VideoPaste from the menu bar and choose the gear button.
+2. Enter a retention amount, choose **Hours**, **Days**, or **Weeks**, and turn
+   on **Automatically move old downloads to Trash**.
+3. Optionally choose **Clean Up Now** to run the first check immediately.
+
+VideoPaste checks while the menu-bar utility is running. Cleanup is limited to
+video files created by VideoPaste inside `~/Downloads/VideoPaste`; unrelated
+files are ignored. Expired videos are moved to the macOS Trash and are not
+permanently erased by VideoPaste. Automatic cleanup is off by default.
 
 VideoPaste accepts X/Twitter status links on `x.com` and `twitter.com`,
 including common `www` and `mobile` variants. X support is limited to public
@@ -152,7 +171,7 @@ sign-in-restricted posts, and posts without video cannot be downloaded.
 | --- | --- |
 | Browser extensions | Find supported Reddit and X/Twitter videos and provide the draggable copy button |
 | Native messaging host | Downloads and copies the MP4 without showing an app window |
-| macOS app | Provides the standalone UI, menu-bar mode, and recent downloads |
+| macOS app | Provides the standalone UI, menu-bar utility, recent downloads, and optional cleanup settings |
 
 The native host accepts supported URLs on Reddit, `redd.it`, X, and Twitter.
 See [PRIVACY.md](PRIVACY.md) for the complete data-handling description.

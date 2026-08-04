@@ -21,4 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     urls.forEach(externalURLHandler)
   }
+
+  func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    false
+  }
 }
