@@ -220,7 +220,7 @@ and `gh`.
 ### Cases
 
 Hover a playing video to find the orange **V** button, then click it. Do all
-five cases.
+six cases.
 
 | # | Case | Where | Passes when |
 | --- | --- | --- | --- |
@@ -229,10 +229,11 @@ five cases.
 | 3 | Old Reddit with RES | A listing on `old.reddit.com`, such as `old.reddit.com/domain/v.redd.it/`. Expand one video post with sound in the listing with its expando button. Do not open the post. | The copy passes. |
 | 4 | "No video" | A video that plays on a Reddit page but is not hosted on Reddit: a promoted post's video, or an expanded post whose domain is not `v.redd.it`. A video with no button is not a case; choose another. | The button says **No video** at once. Its tooltip reads "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else." No new file appears in `~/Downloads/VideoPaste`. |
 | 5 | X | A public X post with a video that has sound. | The copy passes. |
+| 6 | GIF post | A GIF post in Reddit's current design on `www.reddit.com`: a post whose own link is a `.gif` file on `i.redd.it`, playing as a silent looping clip. A GIF with no button is an image, not a case; choose another. | The GIF copy passes. |
 
-Choose videos with sound for cases 1, 2, 3 and 5. A silent clip or GIF post
-has no audio stream and cannot pass. If `www.reddit.com` opens the old design,
-try `sh.reddit.com` for case 1 instead of changing a preference.
+Choose videos with sound for cases 1, 2, 3 and 5. A silent clip has no audio
+stream and cannot pass them. If `www.reddit.com` opens the old design, try
+`sh.reddit.com` for cases 1 and 6 instead of changing a preference.
 
 A copy passes when both of these hold:
 
@@ -253,6 +254,14 @@ A copy passes when both of these hold:
    audio
    video
    ```
+
+The GIF post in case 6 is silent, so its copy passes on a video stream
+alone: the button shows **Loading…** and then **Copied!**, the file's time is
+the time of the click, and the `ffprobe` output is exactly this one line:
+
+```text
+video
+```
 
 When a case does not pass, hover the button and note its label and tooltip,
 then try the case once more on a different post. A post that was deleted or
@@ -275,6 +284,7 @@ Commit `<commit from Prepare step 1>`, package
 | 3 | Old Reddit with RES | <address> | Copied! | audio, video | pass |
 | 4 | "No video" | <address> | No video, tooltip as written, no file | none | pass |
 | 5 | X | <address> | Copied! | audio, video | pass |
+| 6 | GIF post | <address> | Copied! | video | pass |
 
 Restored: VideoPaste <version> in `about:addons`; helper registered at
 `<path>`.

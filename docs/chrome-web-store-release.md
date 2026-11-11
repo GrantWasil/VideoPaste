@@ -354,8 +354,9 @@ installation flow that:
 2. Registers `com.grantwasil.videopaste`.
 3. Writes the final Store Item ID to `allowed_origins`.
 4. Installs or clearly resolves the `yt-dlp` dependency.
-5. Makes a missing companion app actionable instead of leaving the user with
-   only **Try again**.
+5. Makes a missing companion app actionable. The button already says
+   **Setup needed** and its tooltip names the scripts to run, but those are
+   the source-build steps, not a public installer.
 
 The current source-build workflow is appropriate for developers but is a poor
 public Store onboarding path and makes reviewer verification fragile.
@@ -535,7 +536,7 @@ need `yt-dlp`, `ffprobe` (`brew install ffmpeg`) and `gh`.
 ### Cases
 
 Hover a playing video to find the orange **V** button, then click it. Do all
-four cases. There is no RES case, because RES is not installed in Chrome.
+five cases. There is no RES case, because RES is not installed in Chrome.
 
 | # | Case | Where | Passes when |
 | --- | --- | --- | --- |
@@ -543,10 +544,11 @@ four cases. There is no RES case, because RES is not installed in Chrome.
 | 2 | Old Reddit's own player | A `v.redd.it` video post with sound on `old.reddit.com`, such as one listed at `old.reddit.com/domain/v.redd.it/`, played in old Reddit's own player. | The copy passes, and the player has one button. |
 | 3 | "No video" | A video that plays on a Reddit page but is not hosted on Reddit: a promoted post's video, or an expanded post whose domain is not `v.redd.it`. A video with no button is not a case; choose another. | The button says **No video** at once. Its tooltip reads "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else." No new file appears in `~/Downloads/VideoPaste`. |
 | 4 | X | A public X post with a video that has sound. | The copy passes. |
+| 5 | GIF post | A GIF post in Reddit's current design on `www.reddit.com`: a post whose own link is a `.gif` file on `i.redd.it`, playing as a silent looping clip. A GIF with no button is an image, not a case; choose another. | The GIF copy passes. |
 
-Choose videos with sound for cases 1, 2 and 4. A silent clip or GIF post has
-no audio stream and cannot pass. If `www.reddit.com` opens the old design, try
-`sh.reddit.com` for case 1 instead of changing a preference.
+Choose videos with sound for cases 1, 2 and 4. A silent clip has no audio
+stream and cannot pass them. If `www.reddit.com` opens the old design, try
+`sh.reddit.com` for cases 1 and 5 instead of changing a preference.
 
 A copy passes when both of these hold:
 
@@ -567,6 +569,14 @@ A copy passes when both of these hold:
    audio
    video
    ```
+
+The GIF post in case 5 is silent, so its copy passes on a video stream
+alone: the button shows **Loading…** and then **Copied!**, the file's time is
+the time of the click, and the `ffprobe` output is exactly this one line:
+
+```text
+video
+```
 
 When a case does not pass, hover the button and note its label and tooltip,
 then try the case once more on a different post. A post that was deleted or
@@ -590,6 +600,7 @@ built from the same commit.
 | 2 | Old Reddit's own player | <address> | Copied!, one button | audio, video | pass |
 | 3 | "No video" | <address> | No video, tooltip as written, no file | none | pass |
 | 4 | X | <address> | Copied! | audio, video | pass |
+| 5 | GIF post | <address> | Copied! | video | pass |
 
 Restored: VideoPaste <version> turned on in `chrome://extensions`; helper
 registered at `<path>`.
