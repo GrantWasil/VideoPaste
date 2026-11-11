@@ -199,11 +199,10 @@
     "[data-testid='video-player']",
     "[data-testid='post-media']",
     "[data-testid='videoPlayer']",
-  ].join(",");
-  const POST_SELECTOR = [
-    "shreddit-post",
-    "article",
-    "[data-testid='post-container']",
+    // Old Reddit's own player; it holds a second <video> for seek previews.
+    ".reddit-video-player-root",
+    // Reddit Enhancement Suite's player on old Reddit.
+    ".res-video-container",
   ].join(",");
   const X_MEDIA_SELECTOR = [
     "[data-testid='tweetPhoto']",
@@ -370,17 +369,20 @@
     }
   }
 
-  function normalizeHTTPURL(value) {
-    if (!value || value.startsWith("blob:") || value.startsWith("data:")) {
+  // Reads a URL the page holds. `text` is what gets sent: a signed URL must
+  // reach the helper exactly as Reddit wrote it.
+  function readMediaURL(value) {
+    const text = value?.trim();
+    if (!text) {
       return null;
     }
 
     try {
-      const url = new URL(value, window.location.href);
+      const url = new URL(text, window.location.href);
       if (url.protocol !== "https:" && url.protocol !== "http:") {
         return null;
       }
-      return url.href;
+      return { text: /^https?:\/\//i.test(text) ? text : url.href, url };
     } catch {
       return null;
     }
@@ -489,197 +491,194 @@
     );
   }
 
-  function deepFindVideo(root) {
-    if (root instanceof HTMLVideoElement) {
-      return root;
-    }
+  function isRedditVideoHost(hostname) {
+    return hostname === "v.redd.it" || hostname.endsWith(".v.redd.it");
+  }
 
-    const directVideo = root.querySelector?.("video");
-    if (directVideo) {
-      return directVideo;
-    }
+  // New Reddit: the player's `src` is a signed HLS playlist.
+  function newRedditManifestURL(player) {
+    const source = readMediaURL(player.getAttribute("src"));
+    return source &&
+      isRedditVideoHost(source.url.hostname) &&
+      /\.m3u8$/i.test(source.url.pathname)
+      ? source.text
+      : null;
+  }
 
-    if (root.shadowRoot) {
-      const shadowVideo = deepFindVideo(root.shadowRoot);
-      if (shadowVideo) {
-        return shadowVideo;
+  // Old Reddit's own player, also found inside an intact crosspost.
+  function oldRedditManifestURL(player) {
+    const root = player.closest(".reddit-video-player-root");
+    for (const attribute of ["data-hls-url", "data-mpd-url"]) {
+      const source = readMediaURL(root?.getAttribute(attribute));
+      if (source && isRedditVideoHost(source.url.hostname)) {
+        return source.text;
       }
     }
-
-    const nestedPlayers = root.querySelectorAll?.(PLAYER_SELECTOR) ?? [];
-    for (const player of nestedPlayers) {
-      if (player.shadowRoot) {
-        const nestedVideo = deepFindVideo(player.shadowRoot);
-        if (nestedVideo) {
-          return nestedVideo;
-        }
-      }
-    }
-
     return null;
   }
 
-  function findDirectMediaURL(container) {
-    const video = deepFindVideo(container);
-    const candidates = [];
+  // RES plays from a blob and keeps no manifest in the page, so the manifest
+  // URL is built from the post row's video id. Unsigned, so capped at 720p.
+  function builtManifestURL(player) {
+    const rowURL = readMediaURL(
+      player.closest(".thing")?.getAttribute("data-url")
+    )?.url;
+    const videoID =
+      rowURL?.hostname === "v.redd.it"
+        ? rowURL.pathname.match(/^\/([a-z0-9]+)(?:\/|$)/i)?.[1]
+        : null;
+    return videoID
+      ? `https://v.redd.it/${videoID}/HLSPlaylist.m3u8`
+      : null;
+  }
 
-    if (video) {
-      candidates.push(video.currentSrc, video.src, video.getAttribute("src"));
-      for (const source of video.querySelectorAll("source")) {
-        candidates.push(source.src, source.getAttribute("src"));
-      }
-    }
-
-    for (const attribute of ["src", "media-url", "video-url"]) {
-      candidates.push(container.getAttribute?.(attribute));
-    }
-
-    const normalized = candidates
-      .map(normalizeHTTPURL)
+  // A GIF post has no manifest: it plays one complete MP4 from another
+  // Reddit host. Renditions on the video host are silent, and the packaged
+  // MP4 expires within hours, so neither is ever sent.
+  function completeMP4URL(player) {
+    const mediaElements = [player, player.shadowRoot]
+      .filter(Boolean)
+      .flatMap((root) => [...root.querySelectorAll("video, source")]);
+    const sources = [
+      player.getAttribute("src"),
+      ...mediaElements.flatMap((element) => [
+        element.currentSrc,
+        element.getAttribute("src"),
+      ]),
+    ]
+      .map(readMediaURL)
       .filter(Boolean);
 
     return (
-      normalized.find((value) => {
-        try {
-          return new URL(value).hostname === "packaged-media.redd.it";
-        } catch {
-          return false;
-        }
-      }) ?? normalized[0] ?? null
+      sources.find(
+        ({ url }) =>
+          url.hostname.endsWith(".redd.it") &&
+          !isRedditVideoHost(url.hostname) &&
+          url.hostname !== "packaged-media.redd.it" &&
+          (/\.mp4$/i.test(url.pathname) ||
+            url.searchParams.get("format") === "mp4")
+      )?.text ?? null
     );
   }
 
-  function findPostURL(container) {
-    if (isXHostname(window.location.hostname)) {
-      const directStatusLink = closestAcrossRoots(
-        container,
-        "a[href*='/status/']"
-      );
-      const directCandidate = canonicalXPostURL(directStatusLink?.href);
-      if (
-        directCandidate &&
-        /\/video\/[1-9]\d*$/.test(directCandidate)
-      ) {
-        return directCandidate;
-      }
+  // The media URL the page already holds for this button's player, or null
+  // when it holds no Reddit-hosted video. The page is only read: nothing
+  // here makes a request to Reddit (ADR 0001).
+  function findRedditMediaURL(container) {
+    const player =
+      closestAcrossRoots(container, "shreddit-player") ?? container;
+    return (
+      newRedditManifestURL(player) ??
+      oldRedditManifestURL(player) ??
+      builtManifestURL(player) ??
+      completeMP4URL(player)
+    );
+  }
 
-      const mediaContainer = closestAcrossRoots(
-        container,
-        X_MEDIA_SELECTOR
-      );
-      if (mediaContainer) {
-        const attachmentCandidates = Array.from(
-          mediaContainer.querySelectorAll("a[href*='/status/']")
-        )
-          .map((link) => canonicalXPostURL(link.href))
-          .filter(
-            (candidate) =>
-              candidate && /\/video\/[1-9]\d*$/.test(candidate)
-          );
-        const uniqueAttachmentCandidates = [
-          ...new Set(attachmentCandidates),
-        ];
-        if (uniqueAttachmentCandidates.length === 1) {
-          return uniqueAttachmentCandidates[0];
-        }
-      }
-      if (directCandidate) {
-        return directCandidate;
-      }
-
-      const post = closestAcrossRoots(
-        container,
-        "article[data-testid='tweet'], article"
-      );
-      if (post) {
-        const statusLinks = Array.from(
-          post.querySelectorAll("a[href*='/status/']")
-        );
-        const currentCandidate = canonicalXPostURL(
-          window.location.href
-        );
-        if (
-          currentCandidate &&
-          /\/video\/[1-9]\d*$/.test(currentCandidate)
-        ) {
-          const currentStatusID =
-            currentCandidate.match(/\/status\/(\d+)/)?.[1];
-          const timestampLink = statusLinks.find((link) =>
-            link.querySelector("time")
-          );
-          const articleCandidate = canonicalXPostURL(
-            timestampLink?.href
-          );
-          const articleMatchesCurrentPost =
-            articleCandidate?.match(/\/status\/(\d+)/)?.[1] ===
-            currentStatusID;
-          if (articleMatchesCurrentPost) {
-            return currentCandidate;
-          }
-        }
-
-        statusLinks.sort(
-          (left, right) =>
-            Number(Boolean(right.querySelector("time"))) -
-            Number(Boolean(left.querySelector("time")))
-        );
-
-        for (const link of statusLinks) {
-          const candidate = canonicalXPostURL(link.href);
-          if (candidate) {
-            return candidate;
-          }
-        }
-      }
-
-      return canonicalXPostURL(window.location.href);
+  function findXPostURL(container) {
+    const directStatusLink = closestAcrossRoots(
+      container,
+      "a[href*='/status/']"
+    );
+    const directCandidate = canonicalXPostURL(directStatusLink?.href);
+    if (
+      directCandidate &&
+      /\/video\/[1-9]\d*$/.test(directCandidate)
+    ) {
+      return directCandidate;
     }
 
-    const post = closestAcrossRoots(container, POST_SELECTOR);
+    const mediaContainer = closestAcrossRoots(
+      container,
+      X_MEDIA_SELECTOR
+    );
+    if (mediaContainer) {
+      const attachmentCandidates = Array.from(
+        mediaContainer.querySelectorAll("a[href*='/status/']")
+      )
+        .map((link) => canonicalXPostURL(link.href))
+        .filter(
+          (candidate) =>
+            candidate && /\/video\/[1-9]\d*$/.test(candidate)
+        );
+      const uniqueAttachmentCandidates = [
+        ...new Set(attachmentCandidates),
+      ];
+      if (uniqueAttachmentCandidates.length === 1) {
+        return uniqueAttachmentCandidates[0];
+      }
+    }
+    if (directCandidate) {
+      return directCandidate;
+    }
 
+    const post = closestAcrossRoots(
+      container,
+      "article[data-testid='tweet'], article"
+    );
     if (post) {
-      for (const attribute of ["permalink", "data-permalink", "content-href"]) {
-        const candidate = normalizeHTTPURL(post.getAttribute(attribute));
+      const statusLinks = Array.from(
+        post.querySelectorAll("a[href*='/status/']")
+      );
+      const currentCandidate = canonicalXPostURL(
+        window.location.href
+      );
+      if (
+        currentCandidate &&
+        /\/video\/[1-9]\d*$/.test(currentCandidate)
+      ) {
+        const currentStatusID =
+          currentCandidate.match(/\/status\/(\d+)/)?.[1];
+        const timestampLink = statusLinks.find((link) =>
+          link.querySelector("time")
+        );
+        const articleCandidate = canonicalXPostURL(
+          timestampLink?.href
+        );
+        const articleMatchesCurrentPost =
+          articleCandidate?.match(/\/status\/(\d+)/)?.[1] ===
+          currentStatusID;
+        if (articleMatchesCurrentPost) {
+          return currentCandidate;
+        }
+      }
+
+      statusLinks.sort(
+        (left, right) =>
+          Number(Boolean(right.querySelector("time"))) -
+          Number(Boolean(left.querySelector("time")))
+      );
+
+      for (const link of statusLinks) {
+        const candidate = canonicalXPostURL(link.href);
         if (candidate) {
           return candidate;
         }
       }
-
-      const commentsLink = post.querySelector(
-        "a[href*='/comments/'], a[data-testid='post-title']"
-      );
-      const candidate = normalizeHTTPURL(commentsLink?.href);
-      if (candidate) {
-        return candidate;
-      }
     }
 
-    if (window.location.pathname.includes("/comments/")) {
-      return window.location.href;
-    }
-
-    return null;
+    return canonicalXPostURL(window.location.href);
   }
 
-  function chooseSourceURL(container) {
-    if (isXHostname(window.location.hostname)) {
-      return findPostURL(container);
-    }
-
-    const directURL = findDirectMediaURL(container);
-
-    if (directURL) {
-      try {
-        if (new URL(directURL).hostname === "packaged-media.redd.it") {
-          return directURL;
-        }
-      } catch {
-        // Fall through to the post URL.
+  const site = isXHostname(window.location.hostname)
+    ? {
+        findSourceURL: findXPostURL,
+        notFound: {
+          label: "Post unavailable",
+          tooltip:
+            "VideoPaste couldn't identify a public X post for this video.",
+          resetDelay: 1800,
+        },
       }
-    }
-
-    return findPostURL(container) ?? directURL;
-  }
+    : {
+        findSourceURL: findRedditMediaURL,
+        notFound: {
+          label: "No video",
+          tooltip:
+            "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else.",
+          resetDelay: 3200,
+        },
+      };
 
   function showFeedback(
     button,
@@ -783,23 +782,15 @@
         return;
       }
 
-      const sourceURL = chooseSourceURL(container);
+      const sourceURL = site.findSourceURL(container);
       if (!sourceURL) {
-        if (isXHostname(window.location.hostname)) {
-          button.title =
-            "VideoPaste couldn't identify a public X post for this video.";
-          showFeedback(
-            button,
-            "Post unavailable",
-            "vp-copy-button--error"
-          );
-        } else {
-          showFeedback(
-            button,
-            "Open post first",
-            "vp-copy-button--error"
-          );
-        }
+        button.title = site.notFound.tooltip;
+        showFeedback(
+          button,
+          site.notFound.label,
+          "vp-copy-button--error",
+          site.notFound.resetDelay
+        );
         return;
       }
 
