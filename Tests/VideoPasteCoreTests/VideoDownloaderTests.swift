@@ -163,7 +163,7 @@ final class VideoDownloaderTests: XCTestCase {
         VideoDownloader.isSupportedSourceURL(url),
         "Expected \(manifestURL) to be accepted"
       )
-      XCTAssertEqual(try ytdlpSourceArgument(for: manifestURL), manifestURL)
+      XCTAssertEqual(try ytdlpArgument(for: manifestURL), manifestURL)
     }
   }
 
@@ -177,9 +177,44 @@ final class VideoDownloaderTests: XCTestCase {
 
     for renditionFile in renditionFiles {
       XCTAssertEqual(
-        try ytdlpSourceArgument(for: renditionFile),
+        try ytdlpArgument(for: renditionFile),
         "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8",
         "Expected \(renditionFile) to be repaired"
+      )
+    }
+  }
+
+  func testRepairsSingleRenditionPlaylistsToTheUnsignedHLSManifest() throws {
+    let renditionPlaylists = [
+      "https://v.redd.it/sb1bhrydqu0i1/HLS_720.m3u8",
+      "https://v.redd.it/sb1bhrydqu0i1/HLS_AUDIO_128.m3u8",
+      "https://v.redd.it/sb1bhrydqu0i1/HLS_720.m3u8?a=1765432100%2CZGFkYmVlZg%3D%3D&v=1&f=sd",
+      "https://v.redd.it/sb1bhrydqu0i1/CMAF_720.m3u8",
+      "https://v.redd.it/sb1bhrydqu0i1/DASH_720.mpd",
+      "https://v.redd.it/sb1bhrydqu0i1/DASH_AUDIO_128",
+    ]
+
+    for renditionPlaylist in renditionPlaylists {
+      XCTAssertEqual(
+        try ytdlpArgument(for: renditionPlaylist),
+        "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8",
+        "Expected \(renditionPlaylist) to be repaired"
+      )
+    }
+  }
+
+  func testRepairsLinksOnASubdomainOfTheVideoHostKeepingTheirHost() throws {
+    let unusableLinks = [
+      "https://cf.v.redd.it/sb1bhrydqu0i1/DASH_480.mp4",
+      "https://cf.v.redd.it/sb1bhrydqu0i1/HLS_720.m3u8",
+      "https://CF.V.Redd.It/sb1bhrydqu0i1",
+    ]
+
+    for unusableLink in unusableLinks {
+      XCTAssertEqual(
+        try ytdlpArgument(for: unusableLink),
+        "https://cf.v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8",
+        "Expected \(unusableLink) to be repaired"
       )
     }
   }
@@ -193,7 +228,7 @@ final class VideoDownloaderTests: XCTestCase {
 
     for bareLink in bareLinks {
       XCTAssertEqual(
-        try ytdlpSourceArgument(for: bareLink),
+        try ytdlpArgument(for: bareLink),
         "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8",
         "Expected \(bareLink) to be repaired"
       )
@@ -209,6 +244,39 @@ final class VideoDownloaderTests: XCTestCase {
 
     XCTAssertEqual(url.host, "packaged-media.redd.it")
     XCTAssertEqual(VideoDownloader.route(for: url), .directFile(url))
+  }
+
+  func testFetchesAGIFPostsCompleteMP4AsAFile() throws {
+    let gifPostFiles = [
+      "https://preview.redd.it/abc123example.gif?width=480&format=mp4&s=signature",
+      "https://external-preview.redd.it/abc123example.gif?format=mp4&s=signature",
+    ]
+
+    for gifPostFile in gifPostFiles {
+      let url = try VideoDownloader.parsedURL(from: gifPostFile)
+
+      XCTAssertTrue(VideoDownloader.isSupportedSourceURL(url))
+      XCTAssertEqual(
+        VideoDownloader.route(for: url),
+        .directFile(url),
+        "Expected \(gifPostFile) to be fetched as a file"
+      )
+    }
+  }
+
+  func testLeavesOtherFormatMP4LinksToYTDLP() throws {
+    let links = [
+      // An image, not a video.
+      "https://preview.redd.it/abc123example.gif?width=480&s=signature",
+      // The video host never serves a complete file.
+      "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8?format=mp4",
+      "https://www.reddit.com/r/gifs/comments/example/gif/?format=mp4",
+      "https://x.com/videopaste/status/1800000000000000000?format=mp4",
+    ]
+
+    for link in links {
+      XCTAssertEqual(try ytdlpArgument(for: link), link)
+    }
   }
 
   func testRecognizesOrdinaryRedditPostAsHelperDownload() throws {
@@ -247,14 +315,14 @@ final class VideoDownloaderTests: XCTestCase {
 
   /// The address `yt-dlp` is given for a pasted or handed-over link, or `nil`
   /// when the link is fetched as a file without `yt-dlp`.
-  private func ytdlpSourceArgument(for input: String) throws -> String? {
+  private func ytdlpArgument(for input: String) throws -> String? {
     let url = try VideoDownloader.parsedURL(from: input)
-    guard case .ytdlp(let sourceURL) = VideoDownloader.route(for: url) else {
+    guard case .ytdlp(let link) = VideoDownloader.route(for: url) else {
       return nil
     }
 
     return VideoDownloader.ytdlpArguments(
-      sourceURL: sourceURL,
+      sourceURL: link,
       outputTemplate: "/tmp/videopaste-video.%(ext)s"
     ).last
   }

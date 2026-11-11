@@ -35,7 +35,7 @@ public enum NativeRequestError: LocalizedError {
     case .unsupportedAction:
       return "The browser requested an unsupported action."
     case .unsupportedHost:
-      return "The helper only accepts Reddit and X video post links."
+      return "The helper only accepts Reddit and X links."
     }
   }
 }
