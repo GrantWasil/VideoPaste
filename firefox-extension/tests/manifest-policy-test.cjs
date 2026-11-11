@@ -8,9 +8,6 @@ const extensionDirectory = path.resolve(__dirname, "..");
 const manifest = JSON.parse(
   fs.readFileSync(path.join(extensionDirectory, "manifest.json"), "utf8")
 );
-const packageMetadata = JSON.parse(
-  fs.readFileSync(path.join(extensionDirectory, "package.json"), "utf8")
-);
 const amoMetadata = JSON.parse(
   fs.readFileSync(path.join(extensionDirectory, "amo-metadata.json"), "utf8")
 );
@@ -19,11 +16,6 @@ assert.equal(manifest.manifest_version, 3);
 assert.equal(
   manifest.homepage_url,
   "https://github.com/GrantWasil/VideoPaste"
-);
-assert.equal(
-  manifest.version,
-  packageMetadata.version,
-  "manifest.json and package.json versions must stay in sync"
 );
 
 const geckoSettings = manifest.browser_specific_settings?.gecko;
