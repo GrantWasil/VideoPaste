@@ -101,7 +101,52 @@ helper. Build and register those components:
    `about:addons`.
 
 The self-distributed extension does not update automatically. Repeat the XPI
-installation with each newer release.
+installation with each newer release, as described under
+[Updating](#updating).
+
+## Updating
+
+The extensions and the app are released together under one version. Update the
+extension first, then the app.
+
+1. **Firefox:** install the new XPI. Firefox does not update this extension by
+   itself. Download `videopaste-firefox-<version>.xpi` from the newest
+   [VideoPaste release](https://github.com/GrantWasil/VideoPaste/releases), or
+   through the install badge at the top of this page. In `about:addons`, open
+   the gear menu, choose **Install Add-on From File…**, and select the XPI. It
+   replaces the installed version.
+2. **Chrome:** nothing to do. Chrome updates an extension installed from the
+   Chrome Web Store by itself once the Store publishes the new version. An
+   unpacked source build updates with step 3: afterwards, reload it in
+   `chrome://extensions`.
+3. **App and helper:** recommended, not required. In your VideoPaste clone:
+
+   ```sh
+   git pull
+   ./scripts/build-app.sh
+   ```
+
+   Then choose **Quit VideoPaste** in the menu-bar utility and reopen
+   `dist/VideoPaste.app`.
+
+   A clone made with `--branch v<version>`, as in the install steps above, is
+   not on a branch, and `git pull` says so. Check out the new tag instead,
+   then build:
+
+   ```sh
+   git fetch --tags origin
+   git checkout v<version>
+   ```
+
+Rebuilding does not require registering the helper again. Run
+`./scripts/install-videopaste-native-host.sh` again only when the clone has
+moved to a different folder, because the registration holds the helper's full
+path.
+
+In 0.2.0, each half keeps working with the 0.1 version of the other. Updating
+the extension alone makes Reddit copying work again. Rebuilding the app adds
+the exact **Login required** and **Setup needed** button labels and makes a
+pasted `v.redd.it` video link work in the Mac app.
 
 ## Install browser development builds
 
