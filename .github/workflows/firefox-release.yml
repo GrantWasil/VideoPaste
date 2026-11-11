@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing GitHub release tag to sign and update (for example, v0.1.0)
+        description: Existing GitHub release tag to sign and update, in the form v<version>
         required: true
         type: string
 
