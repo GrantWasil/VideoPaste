@@ -5,7 +5,7 @@
 <h1 align="center">VideoPaste</h1>
 
 <p align="center">
-  <a href="https://github.com/GrantWasil/VideoPaste/releases/download/v0.1.0/videopaste-firefox-0.1.0.xpi">
+  <a href="https://github.com/GrantWasil/VideoPaste/releases/download/v0.2.0/videopaste-firefox-0.2.0.xpi">
     <img src="https://img.shields.io/badge/Firefox-Install%20Extension-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white" alt="Install VideoPaste for Firefox">
   </a>
   <a href="https://chromewebstore.google.com/detail/imfheadlgpfgpaiemfciehhbjkbhmjfl">
@@ -36,8 +36,8 @@
 
 ## Why VideoPaste?
 
-Sharing a post link is not always the same as sharing its video, and direct
-Reddit media links can expire. VideoPaste downloads the requested video locally
+Sharing a post link is not always the same as sharing its video, and Reddit
+media URLs can expire. VideoPaste downloads the requested video locally
 and copies the actual MP4 file, ready to paste into Signal, Messages, Slack,
 Discord, or another app.
 
@@ -65,18 +65,15 @@ until you remove them or optional automatic cleanup moves them to Trash.
 - macOS 13 Ventura or newer
 - Firefox 140 or newer, or Chrome 105 or newer, for the browser extension
 - Swift 6.2 or newer when building from source
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) for Reddit post URLs and
-  X/Twitter posts
-
-Direct `packaged-media.redd.it` MP4 links work without `yt-dlp`.
+- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp), required for all Reddit and
+  X/Twitter copying
 
 ## Install a Firefox release
 
 The Firefox extension still requires the local VideoPaste app and native
 helper. Build and register those components:
 
-1. Install the post downloader. It is required for X/Twitter posts and ordinary
-   Reddit post URLs:
+1. Install `yt-dlp`. It is required for all Reddit and X/Twitter copying:
 
    ```sh
    brew install yt-dlp
@@ -101,7 +98,53 @@ helper. Build and register those components:
    `about:addons`.
 
 The self-distributed extension does not update automatically. Repeat the XPI
-installation with each newer release.
+installation with each newer release, as described under
+[Updating](#updating).
+
+## Updating
+
+The extensions and the app are released together under one version. Update the
+extension first, then the app.
+
+1. **Firefox:** install the new XPI. Firefox does not update this extension by
+   itself. Download `videopaste-firefox-<version>.xpi` from the newest
+   [VideoPaste release](https://github.com/GrantWasil/VideoPaste/releases), or
+   through the install badge at the top of this page. In `about:addons`, open
+   the gear menu, choose **Install Add-on From File…**, and select the XPI. It
+   replaces the installed version.
+2. **Chrome:** nothing to do. Chrome updates an extension installed from the
+   Chrome Web Store by itself once the Store publishes the new version. An
+   unpacked source build updates with step 3: afterwards, reload it in
+   `chrome://extensions`.
+3. **App and helper:** recommended, not required. In your VideoPaste clone:
+
+   ```sh
+   git pull
+   ./scripts/build-app.sh
+   ```
+
+   Then choose **Quit VideoPaste** in the menu-bar utility and reopen
+   `dist/VideoPaste.app`.
+
+   A clone made with `--branch v<version>`, as in the install steps above, is
+   not on a branch, and `git pull` says so. Check out the new tag instead,
+   then build:
+
+   ```sh
+   git fetch --tags origin
+   git checkout v<version>
+   ```
+
+Rebuilding does not require registering the helper again. Run
+`./scripts/install-videopaste-native-host.sh` again only when the clone has
+moved to a different folder, because the registration holds the helper's full
+path.
+
+In 0.2.0, each half keeps working with the 0.1 version of the other. Updating
+the extension alone makes Reddit copying work again, with the new button
+labels. Rebuilding the app makes those labels come from an error code the
+helper sends instead of from matching the wording of its messages, and makes a
+pasted `v.redd.it` video link download with sound in the Mac app.
 
 ## Install browser development builds
 
@@ -139,13 +182,32 @@ source files.
 
 ### From the Mac app
 
-1. Copy a supported Reddit video/post link or an X/Twitter video-post link.
+1. Copy a `v.redd.it` video link or an X/Twitter post link.
 2. Open VideoPaste from the menu bar.
 3. Choose **Download Link from Clipboard**.
 4. Paste the resulting MP4 with **⌘V**.
 
+The Mac app does not take Reddit post links: Reddit refuses anonymous requests
+for post data, and VideoPaste never signs in. Reddit posts are copied with the
+browser button.
+
 Closing the VideoPaste window leaves the menu-bar utility running. To stop it
 completely, open the menu-bar utility and choose **Quit VideoPaste**.
+
+### What it can copy
+
+On Reddit, VideoPaste copies videos hosted on Reddit. The browser button copies
+a video the page is already showing you, using the address the page contains.
+A video that is an ad or is hosted somewhere else shows **No video**.
+
+On X/Twitter, VideoPaste accepts status links on `x.com` and `twitter.com`,
+including common `www` and `mobile` variants, and reaches public posts only:
+those containing supported video that `yt-dlp` can reach without an account or
+browser cookies. Private or protected posts, deleted or unavailable posts,
+posts shown only to signed-in accounts, and posts without video cannot be
+downloaded.
+
+VideoPaste never reads browser cookies or signs in to either site.
 
 ### Automatic cleanup
 
@@ -159,17 +221,11 @@ video files created by VideoPaste inside `~/Downloads/VideoPaste`; unrelated
 files are ignored. Expired videos are moved to the macOS Trash and are not
 permanently erased by VideoPaste. Automatic cleanup is off by default.
 
-VideoPaste accepts X/Twitter status links on `x.com` and `twitter.com`,
-including common `www` and `mobile` variants. X support is limited to public
-posts containing supported video that `yt-dlp` can reach without an account or
-browser cookies. Private or protected posts, deleted or unavailable posts,
-sign-in-restricted posts, and posts without video cannot be downloaded.
-
 ## How it works
 
 | Component | Responsibility |
 | --- | --- |
-| Browser extensions | Find supported Reddit and X/Twitter videos and provide the draggable copy button |
+| Browser extensions | Find supported Reddit and X/Twitter videos, provide the draggable copy button, and read from the page the address to download: the video's media URL on Reddit, or the post link on X/Twitter |
 | Native messaging host | Downloads and copies the MP4 without showing an app window |
 | macOS app | Provides the standalone UI, menu-bar utility, recent downloads, and optional cleanup settings |
 
@@ -226,5 +282,7 @@ Reddit, X, Twitter, and other product names are trademarks of their respective
 owners.
 
 Use VideoPaste only to download media you own or are authorized to download.
-VideoPaste does not use browser cookies or bypass private posts, sign-in
-requirements, paywalls, DRM, or other access controls.
+VideoPaste never reads browser cookies or signs in to any site. On Reddit it
+copies a video the page is already showing you, using the address the page
+contains. On X/Twitter it reaches public posts only. It does not circumvent
+paywalls or DRM.

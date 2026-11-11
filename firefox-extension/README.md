@@ -8,7 +8,7 @@ the VideoPaste app window.
 
 ## Install a signed release
 
-Install `yt-dlp`, which is required for X/Twitter and Reddit post URLs, then
+Install `yt-dlp`, which is required for all Reddit and X/Twitter copying, then
 build the app and register its native helper for Firefox and Chrome from the
 project root:
 
@@ -49,11 +49,18 @@ Development builds remain installed only until Firefox restarts.
 2. Click the orange **V** on the video. You can drag it to reposition it.
 3. Wait for **Copied!**, then paste the MP4 with **⌘V**.
 
-Both `x.com` and `twitter.com` status links are supported, including common
-`www` and `mobile` variants. VideoPaste does not sign in to X or use Firefox
-cookies, so private or protected posts, deleted or unavailable posts,
-sign-in-restricted posts, and posts without supported video cannot be
-downloaded. The button reports common failures as **Private post**,
+On Reddit, VideoPaste copies videos hosted on Reddit. It copies a video the
+page is already showing you, using the address the page contains. A video that
+is an ad or is hosted somewhere else shows **No video**.
+
+On X/Twitter, both `x.com` and `twitter.com` status links are supported,
+including common `www` and `mobile` variants, and VideoPaste reaches public
+posts only. Private or protected posts, deleted or unavailable posts, posts
+shown only to signed-in accounts, and posts without supported video cannot be
+downloaded.
+
+VideoPaste never reads Firefox cookies or signs in to either site. When a copy
+fails, the button names the failure, such as **Private post**,
 **Unavailable**, or **No video**; hover it to see the detailed error.
 
 ## Package

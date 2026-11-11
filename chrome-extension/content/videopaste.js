@@ -192,18 +192,19 @@
       opacity: 0 !important;
     }
   `;
+  // New Reddit's player, under each name it has had. Its `src` holds the
+  // manifest URL.
+  const NEW_REDDIT_PLAYER_SELECTOR =
+    "shreddit-player, shreddit-player-2, reddit-video-player";
   const PLAYER_SELECTOR = [
-    "shreddit-player",
-    "shreddit-player-2",
-    "reddit-video-player",
+    NEW_REDDIT_PLAYER_SELECTOR,
     "[data-testid='video-player']",
     "[data-testid='post-media']",
     "[data-testid='videoPlayer']",
-  ].join(",");
-  const POST_SELECTOR = [
-    "shreddit-post",
-    "article",
-    "[data-testid='post-container']",
+    // Old Reddit's own player; it holds a second <video> for seek previews.
+    ".reddit-video-player-root",
+    // Reddit Enhancement Suite's player on old Reddit.
+    ".res-video-container",
   ].join(",");
   const X_MEDIA_SELECTOR = [
     "[data-testid='tweetPhoto']",
@@ -370,17 +371,20 @@
     }
   }
 
-  function normalizeHTTPURL(value) {
-    if (!value || value.startsWith("blob:") || value.startsWith("data:")) {
+  // Reads a URL the page holds. `text` is what gets sent: a signed URL must
+  // reach the helper exactly as Reddit wrote it.
+  function readMediaURL(value) {
+    const text = value?.trim();
+    if (!text) {
       return null;
     }
 
     try {
-      const url = new URL(value, window.location.href);
+      const url = new URL(text, window.location.href);
       if (url.protocol !== "https:" && url.protocol !== "http:") {
         return null;
       }
-      return url.href;
+      return { text: /^https?:\/\//i.test(text) ? text : url.href, url };
     } catch {
       return null;
     }
@@ -489,263 +493,352 @@
     );
   }
 
-  function deepFindVideo(root) {
-    if (root instanceof HTMLVideoElement) {
-      return root;
-    }
+  function isRedditVideoHost(hostname) {
+    return hostname === "v.redd.it" || hostname.endsWith(".v.redd.it");
+  }
 
-    const directVideo = root.querySelector?.("video");
-    if (directVideo) {
-      return directVideo;
-    }
+  // New Reddit: the player's `src` is a signed HLS manifest URL.
+  function newRedditManifestURL(player) {
+    const source = readMediaURL(player.getAttribute("src"));
+    return source &&
+      isRedditVideoHost(source.url.hostname) &&
+      /\.m3u8$/i.test(source.url.pathname)
+      ? source.text
+      : null;
+  }
 
-    if (root.shadowRoot) {
-      const shadowVideo = deepFindVideo(root.shadowRoot);
-      if (shadowVideo) {
-        return shadowVideo;
+  // Old Reddit's own player, also found inside an intact crosspost.
+  function oldRedditManifestURL(player) {
+    const root = player.closest(".reddit-video-player-root");
+    for (const attribute of ["data-hls-url", "data-mpd-url"]) {
+      const source = readMediaURL(root?.getAttribute(attribute));
+      if (source && isRedditVideoHost(source.url.hostname)) {
+        return source.text;
       }
     }
-
-    const nestedPlayers = root.querySelectorAll?.(PLAYER_SELECTOR) ?? [];
-    for (const player of nestedPlayers) {
-      if (player.shadowRoot) {
-        const nestedVideo = deepFindVideo(player.shadowRoot);
-        if (nestedVideo) {
-          return nestedVideo;
-        }
-      }
-    }
-
     return null;
   }
 
-  function findDirectMediaURL(container) {
-    const video = deepFindVideo(container);
-    const candidates = [];
+  // RES plays from a blob and keeps no manifest in the page, so the manifest
+  // URL is built from the post row's video id. Unsigned, so capped at 720p.
+  function builtManifestURL(player) {
+    const rowURL = readMediaURL(
+      player.closest(".thing")?.getAttribute("data-url")
+    )?.url;
+    const videoID =
+      rowURL?.hostname === "v.redd.it"
+        ? rowURL.pathname.match(/^\/([a-z0-9]+)(?:\/|$)/i)?.[1]
+        : null;
+    return videoID
+      ? `https://v.redd.it/${videoID}/HLSPlaylist.m3u8`
+      : null;
+  }
 
-    if (video) {
-      candidates.push(video.currentSrc, video.src, video.getAttribute("src"));
-      for (const source of video.querySelectorAll("source")) {
-        candidates.push(source.src, source.getAttribute("src"));
-      }
-    }
-
-    for (const attribute of ["src", "media-url", "video-url"]) {
-      candidates.push(container.getAttribute?.(attribute));
-    }
-
-    const normalized = candidates
-      .map(normalizeHTTPURL)
+  // A GIF post has no manifest: it plays one complete MP4 from another
+  // Reddit host. Renditions on the video host are silent, and the packaged
+  // MP4 expires within hours, so neither is ever sent.
+  function completeMP4URL(player) {
+    const mediaElements = [player, player.shadowRoot]
+      .filter(Boolean)
+      .flatMap((root) => [...root.querySelectorAll("video, source")]);
+    const sources = [
+      player.getAttribute("src"),
+      ...mediaElements.flatMap((element) => [
+        element.currentSrc,
+        element.getAttribute("src"),
+      ]),
+    ]
+      .map(readMediaURL)
       .filter(Boolean);
 
     return (
-      normalized.find((value) => {
-        try {
-          return new URL(value).hostname === "packaged-media.redd.it";
-        } catch {
-          return false;
-        }
-      }) ?? normalized[0] ?? null
+      sources.find(
+        ({ url }) =>
+          url.hostname.endsWith(".redd.it") &&
+          !isRedditVideoHost(url.hostname) &&
+          url.hostname !== "packaged-media.redd.it" &&
+          (/\.mp4$/i.test(url.pathname) ||
+            url.searchParams.get("format") === "mp4")
+      )?.text ?? null
     );
   }
 
-  function findPostURL(container) {
-    if (isXHostname(window.location.hostname)) {
-      const directStatusLink = closestAcrossRoots(
-        container,
-        "a[href*='/status/']"
-      );
-      const directCandidate = canonicalXPostURL(directStatusLink?.href);
-      if (
-        directCandidate &&
-        /\/video\/[1-9]\d*$/.test(directCandidate)
-      ) {
-        return directCandidate;
-      }
+  // The media URL the page already holds for this button's player, or null
+  // when it holds no Reddit-hosted video. The page is only read: nothing
+  // here makes a request to Reddit (ADR 0001).
+  function findRedditMediaURL(container) {
+    const player =
+      closestAcrossRoots(container, NEW_REDDIT_PLAYER_SELECTOR) ?? container;
+    return (
+      newRedditManifestURL(player) ??
+      oldRedditManifestURL(player) ??
+      builtManifestURL(player) ??
+      completeMP4URL(player)
+    );
+  }
 
-      const mediaContainer = closestAcrossRoots(
-        container,
-        X_MEDIA_SELECTOR
-      );
-      if (mediaContainer) {
-        const attachmentCandidates = Array.from(
-          mediaContainer.querySelectorAll("a[href*='/status/']")
-        )
-          .map((link) => canonicalXPostURL(link.href))
-          .filter(
-            (candidate) =>
-              candidate && /\/video\/[1-9]\d*$/.test(candidate)
-          );
-        const uniqueAttachmentCandidates = [
-          ...new Set(attachmentCandidates),
-        ];
-        if (uniqueAttachmentCandidates.length === 1) {
-          return uniqueAttachmentCandidates[0];
-        }
-      }
-      if (directCandidate) {
-        return directCandidate;
-      }
-
-      const post = closestAcrossRoots(
-        container,
-        "article[data-testid='tweet'], article"
-      );
-      if (post) {
-        const statusLinks = Array.from(
-          post.querySelectorAll("a[href*='/status/']")
-        );
-        const currentCandidate = canonicalXPostURL(
-          window.location.href
-        );
-        if (
-          currentCandidate &&
-          /\/video\/[1-9]\d*$/.test(currentCandidate)
-        ) {
-          const currentStatusID =
-            currentCandidate.match(/\/status\/(\d+)/)?.[1];
-          const timestampLink = statusLinks.find((link) =>
-            link.querySelector("time")
-          );
-          const articleCandidate = canonicalXPostURL(
-            timestampLink?.href
-          );
-          const articleMatchesCurrentPost =
-            articleCandidate?.match(/\/status\/(\d+)/)?.[1] ===
-            currentStatusID;
-          if (articleMatchesCurrentPost) {
-            return currentCandidate;
-          }
-        }
-
-        statusLinks.sort(
-          (left, right) =>
-            Number(Boolean(right.querySelector("time"))) -
-            Number(Boolean(left.querySelector("time")))
-        );
-
-        for (const link of statusLinks) {
-          const candidate = canonicalXPostURL(link.href);
-          if (candidate) {
-            return candidate;
-          }
-        }
-      }
-
-      return canonicalXPostURL(window.location.href);
+  function findXPostLink(container) {
+    const directStatusLink = closestAcrossRoots(
+      container,
+      "a[href*='/status/']"
+    );
+    const directCandidate = canonicalXPostURL(directStatusLink?.href);
+    if (
+      directCandidate &&
+      /\/video\/[1-9]\d*$/.test(directCandidate)
+    ) {
+      return directCandidate;
     }
 
-    const post = closestAcrossRoots(container, POST_SELECTOR);
+    const mediaContainer = closestAcrossRoots(
+      container,
+      X_MEDIA_SELECTOR
+    );
+    if (mediaContainer) {
+      const attachmentCandidates = Array.from(
+        mediaContainer.querySelectorAll("a[href*='/status/']")
+      )
+        .map((link) => canonicalXPostURL(link.href))
+        .filter(
+          (candidate) =>
+            candidate && /\/video\/[1-9]\d*$/.test(candidate)
+        );
+      const uniqueAttachmentCandidates = [
+        ...new Set(attachmentCandidates),
+      ];
+      if (uniqueAttachmentCandidates.length === 1) {
+        return uniqueAttachmentCandidates[0];
+      }
+    }
+    if (directCandidate) {
+      return directCandidate;
+    }
 
+    const post = closestAcrossRoots(
+      container,
+      "article[data-testid='tweet'], article"
+    );
     if (post) {
-      for (const attribute of ["permalink", "data-permalink", "content-href"]) {
-        const candidate = normalizeHTTPURL(post.getAttribute(attribute));
+      const statusLinks = Array.from(
+        post.querySelectorAll("a[href*='/status/']")
+      );
+      const currentCandidate = canonicalXPostURL(
+        window.location.href
+      );
+      if (
+        currentCandidate &&
+        /\/video\/[1-9]\d*$/.test(currentCandidate)
+      ) {
+        const currentStatusID =
+          currentCandidate.match(/\/status\/(\d+)/)?.[1];
+        const timestampLink = statusLinks.find((link) =>
+          link.querySelector("time")
+        );
+        const articleCandidate = canonicalXPostURL(
+          timestampLink?.href
+        );
+        const articleMatchesCurrentPost =
+          articleCandidate?.match(/\/status\/(\d+)/)?.[1] ===
+          currentStatusID;
+        if (articleMatchesCurrentPost) {
+          return currentCandidate;
+        }
+      }
+
+      statusLinks.sort(
+        (left, right) =>
+          Number(Boolean(right.querySelector("time"))) -
+          Number(Boolean(left.querySelector("time")))
+      );
+
+      for (const link of statusLinks) {
+        const candidate = canonicalXPostURL(link.href);
         if (candidate) {
           return candidate;
         }
       }
-
-      const commentsLink = post.querySelector(
-        "a[href*='/comments/'], a[data-testid='post-title']"
-      );
-      const candidate = normalizeHTTPURL(commentsLink?.href);
-      if (candidate) {
-        return candidate;
-      }
     }
 
-    if (window.location.pathname.includes("/comments/")) {
-      return window.location.href;
-    }
-
-    return null;
+    return canonicalXPostURL(window.location.href);
   }
 
-  function chooseSourceURL(container) {
-    if (isXHostname(window.location.hostname)) {
-      return findPostURL(container);
-    }
-
-    const directURL = findDirectMediaURL(container);
-
-    if (directURL) {
-      try {
-        if (new URL(directURL).hostname === "packaged-media.redd.it") {
-          return directURL;
-        }
-      } catch {
-        // Fall through to the post URL.
+  const site = isXHostname(window.location.hostname)
+    ? {
+        findLink: findXPostLink,
+        notFound: {
+          label: "Post unavailable",
+          tooltip:
+            "VideoPaste couldn't identify a public X post for this video.",
+        },
       }
-    }
+    : {
+        findLink: findRedditMediaURL,
+        notFound: {
+          label: "No video",
+          tooltip:
+            "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else.",
+        },
+      };
 
-    return findPostURL(container) ?? directURL;
-  }
+  const RESTING_TOOLTIP =
+    "Click to copy the video, or drag this control to reposition it";
+  const LOADING_CLASS = "vp-copy-button--loading";
+  const SENT_CLASS = "vp-copy-button--sent";
+  const ERROR_CLASS = "vp-copy-button--error";
+  const SENT_RESET_DELAY = 2200;
+  const ERROR_RESET_DELAY = 3200;
 
-  function showFeedback(
-    button,
-    message,
-    modifierClass,
-    resetDelay = 1800
-  ) {
+  // Puts the button in one state: loading, sent, error, or (with no state
+  // class) resting. Any reset an earlier state had pending is dropped.
+  function setButtonState(button, labelText, stateClass = null) {
     const label = button.querySelector(".vp-copy-button__label");
     if (!label) {
       return;
     }
 
-    window.clearTimeout(button.vpFeedbackTimer);
-    button.classList.remove(
-      "vp-copy-button--loading",
-      "vp-copy-button--sent",
-      "vp-copy-button--error"
-    );
-    button.classList.add(modifierClass);
-    label.textContent = message;
+    window.clearTimeout(button.vpResetTimer);
+    button.classList.remove(LOADING_CLASS, SENT_CLASS, ERROR_CLASS);
+    if (stateClass) {
+      button.classList.add(stateClass);
+    }
+    label.textContent = labelText;
     button.setAttribute(
       "aria-busy",
-      modifierClass === "vp-copy-button--loading" ? "true" : "false"
+      stateClass === LOADING_CLASS ? "true" : "false"
     );
-
-    if (resetDelay === null) {
-      return;
-    }
-
-    button.vpFeedbackTimer = window.setTimeout(() => {
-      button.classList.remove(
-        "vp-copy-button--loading",
-        "vp-copy-button--sent",
-        "vp-copy-button--error"
-      );
-      label.textContent = "Copy video";
-      button.setAttribute("aria-busy", "false");
-      button.title =
-        "Click to copy the video, or drag this control to reposition it";
-    }, resetDelay);
   }
 
-  function errorFeedbackMessage(message) {
-    const normalizedMessage = String(message ?? "").toLowerCase();
+  function resetAfter(button, delay) {
+    window.clearTimeout(button.vpResetTimer);
+    button.vpResetTimer = window.setTimeout(() => {
+      setButtonState(button, "Copy video");
+      button.title = RESTING_TOOLTIP;
+    }, delay);
+  }
 
-    if (/\b(private|protected)\b/.test(normalizedMessage)) {
-      return "Private post";
-    }
-    if (
-      /\b(no|without)\b.*\bvideo\b/.test(normalizedMessage) ||
-      /\bdoes(?: not|n't|n’t) (?:contain|have)\b.*\bvideo\b/.test(
-        normalizedMessage
-      ) ||
-      /\bunsupported\b.*\bvideo\b/.test(normalizedMessage)
-    ) {
-      return "No video";
-    }
-    if (
-      /\b(unavailable|deleted)\b/.test(normalizedMessage) ||
-      /\bnot found\b/.test(normalizedMessage) ||
-      /\bdoes not exist\b/.test(normalizedMessage)
-    ) {
-      return "Unavailable";
-    }
+  // Whether a mouse or pen is resting on the button. A finger never rests:
+  // it is gone once it has tapped, though the browser goes on matching
+  // `:hover`, so only the pointer events say what kind of pointer came and
+  // went. `:hover` is still checked, in case a disabled button, which this
+  // one is while loading, did not report the pointer leaving. The class is
+  // part of the selector because a bare `:hover` matches only links on a
+  // page in quirks mode.
+  function pointerRestsOn(button) {
+    return (
+      button.vpPointerResting === true &&
+      button.matches(`.${BUTTON_CLASS}:hover`)
+    );
+  }
 
-    return "Try again";
+  // An error stays while a pointer rests on the button, so its tooltip can
+  // be read, and resets a fixed time after the pointer leaves.
+  function showError(button, { label, tooltip }) {
+    button.title = tooltip;
+    setButtonState(button, label, ERROR_CLASS);
+    if (!pointerRestsOn(button)) {
+      resetAfter(button, ERROR_RESET_DELAY);
+    }
+  }
+
+  function keepErrorWhilePointerRests(button) {
+    const showsError = () => button.classList.contains(ERROR_CLASS);
+    const canRest = (event) =>
+      event.pointerType === "mouse" || event.pointerType === "pen";
+
+    button.addEventListener("pointerenter", (event) => {
+      if (!canRest(event)) {
+        return;
+      }
+      button.vpPointerResting = true;
+      if (showsError()) {
+        window.clearTimeout(button.vpResetTimer);
+      }
+    });
+    button.addEventListener("pointerleave", (event) => {
+      if (!canRest(event)) {
+        return;
+      }
+      button.vpPointerResting = false;
+      if (showsError()) {
+        resetAfter(button, ERROR_RESET_DELAY);
+      }
+    });
+  }
+
+  // What the button shows for each error code a failure response carries.
+  // A failure with no tooltip here keeps the helper's prose as its tooltip.
+  const FAILURES = new Map([
+    ["private_post", { label: "Private post" }],
+    [
+      "login_required",
+      {
+        label: "Login required",
+        tooltip:
+          "This post is only shown to signed-in accounts. VideoPaste downloads without your account or cookies, so it can't copy this one.",
+      },
+    ],
+    ["no_video", { label: "No video" }],
+    ["unavailable", { label: "Unavailable" }],
+    [
+      "ytdlp_missing",
+      {
+        label: "Setup needed",
+        tooltip:
+          "VideoPaste needs yt-dlp to download this video. Install it by running “brew install yt-dlp” in Terminal, then try again.",
+      },
+    ],
+    [
+      "helper_unreachable",
+      {
+        label: "Setup needed",
+        tooltip:
+          "The browser got no answer from the VideoPaste helper: it isn't set up, or it stopped before answering. To set it up or repair it, open Terminal in your VideoPaste folder and run “./scripts/build-app.sh”, then “./scripts/install-videopaste-native-host.sh”.",
+      },
+    ],
+    ["failed", { label: "Try again" }],
+  ]);
+
+  // A v0.1 helper sends prose and no code, so the code is worked out from
+  // the prose. Only a sentence that helper wrote is read for meaning, and it
+  // is recognised by how it opens. Whatever else the helper passes on (raw
+  // `yt-dlp` output, a system error) is `failed`, the code the current
+  // helper gives it: a phrase such as "not found" inside downloader output
+  // never picks a label. An unreachable helper is not here: the background
+  // script reports it and always sets the code.
+  const PROSE_CODES = [
+    [
+      /^this looks like a video post rather than a direct video link\b/,
+      "ytdlp_missing",
+    ],
+    [/^this post requires a signed-in account\b/, "login_required"],
+    [/^this post is private\b/, "private_post"],
+    [/^this post doesn’t contain a supported video\b/, "no_video"],
+    [/^this post is unavailable\b/, "unavailable"],
+    [/^this video link has expired or is unavailable\b/, "unavailable"],
+  ];
+
+  function codeFromProse(prose) {
+    const sentence = prose.trim().toLowerCase();
+    return (
+      PROSE_CODES.find(([pattern]) => pattern.test(sentence))?.[1] ??
+      "failed"
+    );
+  }
+
+  // The label and tooltip for a failed attempt. `response` is the failure
+  // response, or what stands in for one when no response arrived.
+  function failureFeedback(response) {
+    const prose =
+      typeof response?.error === "string" && response.error
+        ? response.error
+        : "The video could not be copied.";
+    const code =
+      typeof response?.code === "string"
+        ? response.code
+        : codeFromProse(prose);
+    const failure = FAILURES.get(code) ?? FAILURES.get("failed");
+
+    return { label: failure.label, tooltip: failure.tooltip ?? prose };
   }
 
   function makeButton(container) {
@@ -756,8 +849,7 @@
       "aria-label",
       "Click to download and copy this video, or drag to reposition"
     );
-    button.title =
-      "Click to copy the video, or drag this control to reposition it";
+    button.title = RESTING_TOOLTIP;
 
     const badge = document.createElement("span");
     badge.className = "vp-copy-button__badge";
@@ -783,65 +875,40 @@
         return;
       }
 
-      const sourceURL = chooseSourceURL(container);
+      const sourceURL = site.findLink(container);
       if (!sourceURL) {
-        if (isXHostname(window.location.hostname)) {
-          button.title =
-            "VideoPaste couldn't identify a public X post for this video.";
-          showFeedback(
-            button,
-            "Post unavailable",
-            "vp-copy-button--error"
-          );
-        } else {
-          showFeedback(
-            button,
-            "Open post first",
-            "vp-copy-button--error"
-          );
-        }
+        showError(button, site.notFound);
         return;
       }
 
       button.dataset.vpBusy = "true";
       button.disabled = true;
-      showFeedback(
-        button,
-        "Loading…",
-        "vp-copy-button--loading",
-        null
-      );
+      setButtonState(button, "Loading…", LOADING_CLASS);
 
+      let response;
       try {
-        const response = await extensionMessaging.sendMessage({
+        response = await extensionMessaging.sendMessage({
           type: "vp-download-and-copy",
           url: sourceURL,
         });
+      } catch (error) {
+        response = { ok: false, error: error?.message };
+      }
 
-        if (!response?.ok) {
-          throw new Error(
-            response?.error ?? "The video could not be copied."
-          );
-        }
+      button.disabled = false;
+      delete button.dataset.vpBusy;
 
+      if (response?.ok) {
         button.title = response.fileName
           ? `Copied ${response.fileName}`
           : "Copied to the clipboard";
-        showFeedback(button, "Copied!", "vp-copy-button--sent", 2200);
-      } catch (error) {
-        button.title =
-          error?.message ?? "The video could not be copied.";
-        showFeedback(
-          button,
-          errorFeedbackMessage(error?.message),
-          "vp-copy-button--error",
-          3200
-        );
-      } finally {
-        button.disabled = false;
-        delete button.dataset.vpBusy;
+        setButtonState(button, "Copied!", SENT_CLASS);
+        resetAfter(button, SENT_RESET_DELAY);
+      } else {
+        showError(button, failureFeedback(response));
       }
     });
+    keepErrorWhilePointerRests(button);
     enableButtonDragging(button, container);
 
     return button;

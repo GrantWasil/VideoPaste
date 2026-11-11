@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VideoPaste",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "minimum_chrome_version": "105",
   "description": "Sends a Reddit or X video URL you choose to the local VideoPaste helper so it can download and copy the video.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqEhKn1u22paI/yMBsPeDpglhg8kgkf6+hw1jDCZ5nyQmDhKB2unkQOetoeLkd5diR2I4PRVAaIVrW0aRlusA0eQF5XMFhrTsTM40TaVCFiSf/p5VZ3CpwE1jzhonugz82q5/7IwPpckGSs4eSXdFoqWZpA3DalZHEjtKB2+mQIgvG2v8WqjTqdES++RTFFVW5De0V7NwsOpV7hG7BlVg2ei5IdImnOTAeMSOje2a9lzAuIKhX8gqt36BZPT+Qi90W3R24fJ+UcTwlgukUDQidb5ARCD6CgdvYXG2dEnOw9amSkTD6UAVeCeEkoDNBTMTswKNs+w37ZuthL7qVZKLyQIDAQAB",

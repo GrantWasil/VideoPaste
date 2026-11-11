@@ -61,25 +61,60 @@ async function run() {
   assert.equal(response.ok, true);
   assert.equal(response.status, "copied");
 
+  // A helper failure keeps the helper's code and prose.
   nativeResponse = {
     ok: false,
     status: "error",
-    error: "The helper rejected the URL.",
+    error: "This post is private. VideoPaste can only download public posts.",
+    code: "private_post",
   };
   assert.deepEqual(
     plain(await messageListener(requestMessage)),
     {
       ok: false,
-      error: "The helper rejected the URL.",
+      error:
+        "This post is private. VideoPaste can only download public posts.",
+      code: "private_post",
     }
   );
 
+  // A code this extension has never heard of is still the helper's to send.
+  nativeResponse = {
+    ok: false,
+    status: "error",
+    error: "Something new went wrong.",
+    code: "some_future_code",
+  };
+  assert.deepEqual(
+    plain(await messageListener(requestMessage)),
+    {
+      ok: false,
+      error: "Something new went wrong.",
+      code: "some_future_code",
+    }
+  );
+
+  // An older helper sends no code, and the bridge must not invent one.
+  nativeResponse = {
+    ok: false,
+    status: "error",
+    error: "The helper rejected the URL.",
+  };
+  const olderHelperFailure = await messageListener(requestMessage);
+  assert.deepEqual(plain(olderHelperFailure), {
+    ok: false,
+    error: "The helper rejected the URL.",
+  });
+  assert.equal("code" in olderHelperFailure, false);
+
+  // The browser could not reach the helper at all.
   nativeError = new Error("Native host is missing.");
   assert.deepEqual(
     plain(await messageListener(requestMessage)),
     {
       ok: false,
       error: "Native host is missing.",
+      code: "helper_unreachable",
     }
   );
 

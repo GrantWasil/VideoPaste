@@ -50,10 +50,15 @@ async function run() {
     assert.equal(response.ok, true, response.error);
     assert.equal(response.status, "copied");
     assert.match(response.fileName, /\.mp4$/i);
+    assert.equal("code" in response, false);
   } else {
     assert.equal(response.ok, false);
     assert.equal(response.status, "error");
-    assert.match(response.error, /video post links/i);
+    assert.equal(
+      response.error,
+      "The helper only accepts Reddit and X links."
+    );
+    assert.equal(response.code, "failed");
   }
 
   console.log(

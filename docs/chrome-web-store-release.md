@@ -142,7 +142,9 @@ unzip -l dist/videopaste-chrome.zip
 ```
 
 Test the exact ZIP by extracting it to a fresh directory and loading that
-directory in Chrome, not only the source directory.
+directory in Chrome, not only the source directory. The
+[release checklist](#release-checklist-live-reddit-and-x-in-chrome) does this
+against live Reddit and X.
 
 ## 4. Privacy Practices and policy declarations
 
@@ -165,22 +167,24 @@ Use the **Privacy Practices** tab to provide:
 
 Suggested single-purpose statement:
 
-> VideoPaste lets a macOS user select a public video on Reddit or X/Twitter,
-> download it through the local VideoPaste companion app, and place the
-> resulting MP4 file on the macOS clipboard.
+> VideoPaste lets a macOS user select a video on Reddit or a public video on
+> X/Twitter, download it through the local VideoPaste companion app, and place
+> the resulting MP4 file on the macOS clipboard.
 
 Suggested `nativeMessaging` justification:
 
-> Native messaging sends the user-selected Reddit or X/Twitter post/media URL
-> and an explicit download command to the locally installed VideoPaste helper.
-> The helper downloads the requested media and places the local MP4 on the
-> macOS clipboard. No project-operated server receives the URL or media.
+> Native messaging sends the address of the video the user selected (the
+> video's media URL on Reddit, or the post link on X/Twitter) and an explicit
+> download command to the locally installed VideoPaste helper. The helper
+> downloads the requested media and places the local MP4 on the macOS
+> clipboard. No project-operated server receives the URL or media.
 
 Suggested site-access justification:
 
 > Access is limited to Reddit, X, and Twitter pages so VideoPaste can identify
-> supported video players, show its user-facing Copy video control, and derive
-> the URL selected by the user. It does not run on unrelated sites.
+> supported video players, show its user-facing Copy video control, and read
+> from the page the address of the video the user selects. It only reads the
+> page and does not run on unrelated sites.
 
 Suggested remote-code answer:
 
@@ -192,19 +196,26 @@ Suggested remote-code answer:
 **Recommended conservative declaration:** disclose both **website content**
 and **web browsing activity/URLs** (using the closest labels in the live
 Dashboard). The extension inspects supported pages locally to locate video
-players, and after a click it sends the selected page/media URL to the local
-helper. Do not mark “no data” merely because the project has no cloud server;
-Google explicitly includes local processing in its disclosure rule.
+players, and after a click it sends the video's media URL on Reddit, or the
+post link on X/Twitter, to the local helper. Do not mark “no data” merely
+because the project has no cloud server; Google explicitly includes local
+processing in its disclosure rule.
 
 The disclosures, listing, extension behavior, and privacy policy must agree.
 At minimum, the public policy should say:
 
 - The extension locally inspects supported Reddit/X/Twitter page content to
   find videos and add the Copy video control.
-- It sends a selected post/media URL and command to the local native helper
-  only after the user clicks the control.
-- The helper contacts Reddit, X/Twitter, their media/CDN hosts, and hosts
-  contacted by `yt-dlp` only to resolve and retrieve the selected public media.
+- It sends the video's media URL on Reddit, or the post link on X/Twitter, and
+  a command to the local native helper only after the user clicks the control.
+- A Reddit media URL can include a time-limited access signature that Reddit
+  placed in the page. It is used only to download that video and is not
+  stored.
+- The extension only reads the page and makes no request to Reddit from the
+  signed-in tab.
+- The helper contacts Reddit's video hosts (`v.redd.it` and related `redd.it`
+  hosts), X/Twitter and their media hosts, and hosts contacted by `yt-dlp` only
+  to retrieve the selected media.
 - Downloaded files and the five recent local paths remain on the Mac.
 - The project has no accounts, analytics, telemetry, advertising, tracking, or
   project-operated server.
@@ -240,14 +251,18 @@ downloading/streaming of copyrighted media.
   authorization.
 - Do not imply affiliation with or endorsement by Reddit, X, or Google.
 
+VideoPaste never reads browser cookies or signs in, and its helper downloads
+anonymously. On Reddit it downloads only a video the page is already showing
+the user, from the address that page contains.
+
 ### Recommended listing language
 
 Include a visible limitation such as:
 
-> VideoPaste works with supported public Reddit and X/Twitter video posts. It
-> does not use browser cookies, access private or login-restricted posts, or
-> bypass access controls. Download only media you own or are authorized to
-> download.
+> VideoPaste never reads browser cookies or signs in to any site. On Reddit it
+> copies a video the page is already showing you, using the address the page
+> contains. On X/Twitter it reaches public posts only. Download only media you
+> own or are authorized to download.
 
 Keep the existing independent-project disclaimer. Do not use Reddit or X
 branding in a way that suggests endorsement.
@@ -271,11 +286,11 @@ Prepare:
 
 The first paragraph should state all material dependencies:
 
-> VideoPaste for Chrome adds a Copy video control to supported public Reddit
-> and X/Twitter videos. It requires macOS 13 or newer and the separately
-> installed VideoPaste companion app/native helper.
+> VideoPaste for Chrome adds a Copy video control to supported Reddit videos
+> and public X/Twitter video posts. It requires macOS 13 or newer and the
+> separately installed VideoPaste companion app/native helper.
 
-Also disclose that X/Twitter and ordinary Reddit post URLs require `yt-dlp`,
+Also disclose that `yt-dlp` is required for all Reddit and X/Twitter copying,
 unless the release companion app bundles that dependency.
 
 ### Graphic assets
@@ -339,8 +354,9 @@ installation flow that:
 2. Registers `com.grantwasil.videopaste`.
 3. Writes the final Store Item ID to `allowed_origins`.
 4. Installs or clearly resolves the `yt-dlp` dependency.
-5. Makes a missing companion app actionable instead of leaving the user with
-   only **Try again**.
+5. Makes a missing companion app actionable. The button already says
+   **Setup needed** and its tooltip names the scripts to run, but those are
+   the source-build steps, not a public installer.
 
 The current source-build workflow is appropriate for developers but is a poor
 public Store onboarding path and makes reviewer verification fragile.
@@ -356,11 +372,11 @@ Suggested reviewer instructions:
 2. Provide a direct companion-app download and checksum.
 3. Give exact installation/registration steps.
 4. Explain the `nativeMessaging` warning.
-5. Give one known-working public Reddit post and one public X post.
+5. Give one known-working Reddit video and one public X video post.
 6. Ask the reviewer to click the orange **V**, wait for **Copied!**, then paste
    the MP4 into Finder or a text-capable messaging app.
-7. Explain expected errors for private, deleted, login-restricted, or
-   non-video posts.
+7. Explain the errors to expect when a post is private, deleted, shown only to
+   signed-in accounts, or has no supported video.
 8. Link to source code and the public privacy policy.
 
 ## 8. Distribution, testing, and submission
@@ -414,17 +430,230 @@ code may take longer.
 For every extension update:
 
 1. Increase `manifest.json`'s version; it must be greater than every prior
-   upload.
+   upload. The Chrome extension shares its version with the Firefox extension
+   and the app, so follow step 1 of the
+   [Firefox version and release procedure](firefox-release.md#version-and-release-procedure).
 2. Run the full tests.
 3. Build a complete new ZIP containing changed and unchanged runtime files.
-4. Update listing, distribution, and privacy metadata if behavior changed.
-5. Upload and submit the update for review.
+4. Run the [release checklist](#release-checklist-live-reddit-and-x-in-chrome)
+   against that ZIP and record the result on the release pull request. A real
+   failure blocks the release.
+5. Update listing, distribution, and privacy metadata if behavior changed.
+6. Upload and submit the update for review.
 
 Existing users remain on the published version while an update is reviewed.
 Adding warning-producing permissions requires users to approve them and may
 disable the extension until they do. Percentage rollout becomes available only
 for items with more than 10,000 seven-day active users.
 [Updating a Store item](https://developer.chrome.com/docs/webstore/update)
+
+## Release checklist: live Reddit and X in Chrome
+
+CI never contacts Reddit or X. This checklist is the only check of a release
+against the live sites. It runs on the release pull request's head commit,
+before the merge, and a person or an agent with computer use can follow it.
+Run its Zen counterpart in
+[`firefox-release.md`](firefox-release.md#release-checklist-live-reddit-and-x-in-zen)
+for the same release.
+
+It runs on the maintainer's Mac in the everyday Chrome profile. The commands
+need `yt-dlp`, `ffprobe` (`brew install ffmpeg`) and `gh`.
+
+### Rules
+
+- **Read only.** On Reddit and X, only open pages, expand and play videos, and
+  click the VideoPaste button. Do not vote, post, comment, message, follow,
+  save, hide, sign in, sign out, or change any setting on either site. On
+  both sites, use whatever session Chrome already has.
+- **Public pages only.** Choose posts from public subreddits and public X
+  accounts, not from a home feed, because their addresses go into the pull
+  request.
+- **Test what ships.** Load the ZIP built in step 4, never the
+  `chrome-extension` source folder.
+- **Put everything back.** Do every step under Restore, also after a failure.
+
+### Prepare
+
+1. Check out the release commit in its own folder, so that building there does
+   not overwrite the installed helper. From the everyday VideoPaste clone:
+
+   ```sh
+   git fetch origin "pull/<pull request number>/head"
+   git worktree add --detach ../VideoPaste-release-check FETCH_HEAD
+   cd ../VideoPaste-release-check
+   git rev-parse HEAD
+   ```
+
+   Write down the commit that the last command prints. Run every later
+   command from this folder.
+2. Write down what is installed now:
+
+   - In Chrome, open `chrome://extensions`. Note each VideoPaste listed there,
+     its version and whether it is turned on, and note whether **Developer
+     mode** is on.
+   - Note the path of the registered helper. If the file does not exist, no
+     helper is registered; note that instead.
+
+     ```sh
+     /usr/bin/plutil -extract path raw -o - \
+       "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.grantwasil.videopaste.json"
+     ```
+
+3. Build the new helper:
+
+   ```sh
+   ./scripts/build-app.sh
+   ```
+
+4. Build the ZIP and extract it to a fresh folder:
+
+   ```sh
+   ./scripts/package-chrome-extension.sh
+   rm -rf dist/chrome-release-check
+   unzip -q dist/videopaste-chrome.zip -d dist/chrome-release-check
+   ```
+
+   `dist/videopaste-chrome.zip` is the ZIP about to be uploaded to the Store.
+5. Load it in Chrome. In `chrome://extensions`, turn off every VideoPaste
+   noted in step 2, turn on **Developer mode**, choose **Load unpacked**, and
+   select `dist/chrome-release-check`. Note the 32-letter **ID** Chrome shows
+   for it. The Store ZIP carries no key, so this ID belongs to the folder and
+   is neither the Store ID nor the development ID.
+6. Register the new helper for that ID. The helper answers only the IDs it
+   was registered with, so name the two permanent IDs and the one from step 5:
+
+   ```sh
+   ./scripts/install-videopaste-native-host.sh dist/VideoPaste.app \
+     imfheadlgpfgpaiemfciehhbjkbhmjfl \
+     okkpnnbniecihdbgfndcnknjeoajbhnf \
+     <ID from step 5>
+   ```
+
+   Run the `plutil` command from step 2 again. It must now print a path
+   inside `VideoPaste-release-check`.
+7. Reload every open Reddit, X and Twitter tab.
+
+### Cases
+
+Hover a playing video to find the orange **V** button, then click it. Do all
+five cases. There is no RES case, because RES is not installed in Chrome.
+
+| # | Case | Where | Passes when |
+| --- | --- | --- | --- |
+| 1 | New Reddit | A video post with sound in Reddit's current design on `www.reddit.com`. | The copy passes. |
+| 2 | Old Reddit's own player | A `v.redd.it` video post with sound on `old.reddit.com`, such as one listed at `old.reddit.com/domain/v.redd.it/`, played in old Reddit's own player. | The copy passes, and the player has one button. |
+| 3 | "No video" | A video that plays on a Reddit page but is not hosted on Reddit: a promoted post's video, or an expanded post whose domain is not `v.redd.it`. A video with no button is not a case; choose another. | The button says **No video** at once. Its tooltip reads "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else." No new file appears in `~/Downloads/VideoPaste`. |
+| 4 | X | A public X post with a video that has sound. | The copy passes. |
+| 5 | GIF post | A GIF post in Reddit's current design on `www.reddit.com`: a post whose own link is a `.gif` file on `i.redd.it`, playing as a silent looping clip. A GIF with no button is an image, not a case; choose another. | The GIF copy passes. |
+
+Choose videos with sound for cases 1, 2 and 4. A silent clip has no audio
+stream and cannot pass them. If `www.reddit.com` opens the old design, try
+`sh.reddit.com` for cases 1 and 5 instead of changing a preference.
+
+A copy passes when both of these hold:
+
+1. The button shows **Loading…** and then **Copied!**
+2. The helper's output MP4 has a video stream and an audio stream. Right
+   after **Copied!**, run:
+
+   ```sh
+   newest="$(ls -t "$HOME/Downloads/VideoPaste"/*.mp4 | head -n 1)"
+   ls -l "$newest"
+   ffprobe -v error -show_entries stream=codec_type -of csv=p=0 "$newest" | sort -u
+   ```
+
+   The file's time must be the time of the click, and the `ffprobe` output
+   must be exactly these two lines:
+
+   ```text
+   audio
+   video
+   ```
+
+The GIF post in case 5 is silent, so its copy passes on a video stream
+alone: the button shows **Loading…** and then **Copied!**, the file's time is
+the time of the click, and the `ffprobe` output is exactly this one line:
+
+```text
+video
+```
+
+When a case does not pass, hover the button and note its label and tooltip,
+then try the case once more on a different post. A post that was deleted or
+made private is the post's failure, not the release's. When every case fails,
+first compare the ID from Prepare step 5 with `allowed_origins` in the file
+the `plutil` command reads.
+
+### Record the result
+
+Post one comment on the release pull request, filled in from this template:
+
+```markdown
+## Release checklist: Chrome
+
+Commit `<commit from Prepare step 1>`, package `videopaste-chrome.zip`, helper
+built from the same commit.
+
+| # | Case | Page | Button | `ffprobe` streams | Result |
+| --- | --- | --- | --- | --- | --- |
+| 1 | New Reddit | <address> | Copied! | audio, video | pass |
+| 2 | Old Reddit's own player | <address> | Copied!, one button | audio, video | pass |
+| 3 | "No video" | <address> | No video, tooltip as written, no file | none | pass |
+| 4 | X | <address> | Copied! | audio, video | pass |
+| 5 | GIF post | <address> | Copied! | video | pass |
+
+Restored: VideoPaste <version> turned on in `chrome://extensions`; helper
+registered at `<path>`.
+
+Overall: pass
+```
+
+```sh
+gh pr comment <pull request number> --repo GrantWasil/VideoPaste --body-file <file with the comment>
+```
+
+For a case that failed, write the label, the tooltip and both pages tried in
+its row, and set the overall result to **fail**.
+
+**A real failure blocks the release.** A failure is real when a case fails on
+two different posts while the extracted ZIP is the only VideoPaste turned on
+and the `plutil` command prints the new helper's path. Do not merge, tag or
+submit until the cause is fixed and the whole checklist passes on the new
+commit. Tooling that gets stuck is not a real failure: when an agent cannot
+drive the browser, it says so on the pull request and the maintainer runs the
+checklist by hand.
+
+### Restore
+
+1. In `chrome://extensions`, choose **Remove** on the VideoPaste loaded from
+   `dist/chrome-release-check`. Turn on each VideoPaste that was on in Prepare
+   step 2, and set **Developer mode** back to what it was.
+2. Register the helper noted in Prepare step 2 again, for the two permanent
+   IDs only. Pass the path of its `VideoPaste.app`, which is the noted path
+   without `/Contents/MacOS/VideoPasteNativeHost`:
+
+   ```sh
+   ./scripts/install-videopaste-native-host.sh "<path of the noted VideoPaste.app>"
+   ```
+
+   Run the `plutil` command from Prepare step 2 again. It must print the
+   noted path. If no helper was registered at the start, leave this step out.
+3. Reload every open Reddit, X and Twitter tab.
+4. After the Zen checklist has also finished, remove the folder. From the
+   everyday VideoPaste clone:
+
+   ```sh
+   git worktree remove --force ../VideoPaste-release-check
+   ```
+
+The videos copied during the run stay in `~/Downloads/VideoPaste` and can be
+deleted.
+
+When the Zen and Chrome checklists run back to back, check out the folder,
+note the registered helper and build the new helper once, before either
+checklist registers it. Keep the folder and the registration between the two;
+the registration in step 6 also serves Zen. Restore the helper once, after the
+second checklist.
 
 ## Final release checklist
 
@@ -472,6 +701,8 @@ for items with more than 10,000 seven-day active users.
 
 - [x] Run tests and build the exact submitted ZIP.
 - [x] Verify ZIP contents, keyless packaged manifest, and manifest version.
+- [ ] The [release checklist](#release-checklist-live-reddit-and-x-in-chrome)
+      passes for the ZIP being submitted.
 - [ ] Private Store install passes on a clean Chrome profile.
 - [ ] Reddit and X downloads work through the final Store ID.
 - [ ] Missing-helper and unsupported-post errors are actionable.

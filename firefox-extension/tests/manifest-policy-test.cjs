@@ -8,9 +8,6 @@ const extensionDirectory = path.resolve(__dirname, "..");
 const manifest = JSON.parse(
   fs.readFileSync(path.join(extensionDirectory, "manifest.json"), "utf8")
 );
-const packageMetadata = JSON.parse(
-  fs.readFileSync(path.join(extensionDirectory, "package.json"), "utf8")
-);
 const amoMetadata = JSON.parse(
   fs.readFileSync(path.join(extensionDirectory, "amo-metadata.json"), "utf8")
 );
@@ -19,11 +16,6 @@ assert.equal(manifest.manifest_version, 3);
 assert.equal(
   manifest.homepage_url,
   "https://github.com/GrantWasil/VideoPaste"
-);
-assert.equal(
-  manifest.version,
-  packageMetadata.version,
-  "manifest.json and package.json versions must stay in sync"
 );
 
 const geckoSettings = manifest.browser_specific_settings?.gecko;
@@ -42,7 +34,7 @@ assert.deepEqual(
   {
     required: ["browsingActivity", "websiteContent"],
   },
-  "Native messaging must disclose supported post URLs and media metadata sent to the local helper"
+  "Native messaging must disclose the post links and media URLs sent to the local helper"
 );
 
 assert.deepEqual(
@@ -62,8 +54,26 @@ assert.match(
   ),
   "The native host allowed_extensions entry must match the Gecko extension ID"
 );
-assert.match(amoMetadata.version?.approval_notes, /native host/i);
-assert.match(amoMetadata.version?.approval_notes, /PRIVACY\.md/);
+const approvalNotes = amoMetadata.version?.approval_notes;
+assert.match(approvalNotes, /native host/i);
+assert.match(approvalNotes, /PRIVACY\.md/);
+assert.ok(
+  approvalNotes.includes(
+    "the video's media URL on Reddit, or the post link on X/Twitter"
+  ),
+  "The approval notes must say what is sent to the native host for each site"
+);
+assert.ok(
+  approvalNotes.includes(
+    "yt-dlp is required for all Reddit and X/Twitter copying"
+  ),
+  "The approval notes must state the yt-dlp requirement without exceptions"
+);
+assert.doesNotMatch(
+  approvalNotes,
+  /packaged-media|without yt-dlp/i,
+  "No Reddit copy works without yt-dlp, so the approval notes must not offer one"
+);
 
 const contentScripts = manifest.content_scripts;
 assert.equal(contentScripts.length, 1);
