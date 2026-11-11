@@ -610,20 +610,347 @@ async function testNoRedditHostedVideo(browser, runtimeNamespace) {
 
   const button = page.locator(".vp-copy-button");
   await button.waitFor();
+  await freezeClock(page);
   await button.click();
-  assert.equal(
-    await button.locator(".vp-copy-button__label").textContent(),
-    "No video"
-  );
-  assert.equal(
-    await button.getAttribute("title"),
-    "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else."
-  );
+  const noVideo = {
+    label: "No video",
+    tooltip:
+      "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else.",
+  };
+  assert.deepEqual(await shownOn(button), noVideo);
   assert.deepEqual(
     await sentMessages(page),
     [],
     "With no Reddit-hosted video nothing is sent to the helper"
   );
+
+  await page.clock.fastForward(60_000);
+  assert.deepEqual(
+    await shownOn(button),
+    noVideo,
+    "An on-the-spot error must stay while the pointer is over the button"
+  );
+  await page.mouse.move(0, 0);
+  await assertResetsIn3200ms(page, button, noVideo);
+  await page.close();
+}
+
+async function openPlayerFixture(browser, runtimeNamespace) {
+  const page = await openFixture(
+    browser,
+    runtimeNamespace,
+    `
+      <shreddit-player
+        src="${SIGNED_HLS_URL.replaceAll("&", "&amp;")}"
+        style="display: block; height: 225px; width: 400px;"
+      ></shreddit-player>
+    `
+  );
+  const button = page.locator(".vp-copy-button");
+  await button.waitFor();
+  return { page, button };
+}
+
+function shownOn(button) {
+  return button.evaluate((button) => ({
+    label: button.querySelector(".vp-copy-button__label").textContent,
+    tooltip: button.title,
+  }));
+}
+
+// Clicks and checks the click started exactly one attempt.
+async function clickToSend(page, button) {
+  const sentBefore = (await sentMessages(page)).length;
+  await button.click();
+  const messages = await sentMessages(page);
+  assert.equal(
+    messages.length,
+    sentBefore + 1,
+    "One click must send exactly one message"
+  );
+  assert.deepEqual(messages.at(-1), {
+    type: "vp-download-and-copy",
+    url: SIGNED_HLS_URL,
+  });
+  assert.equal((await shownOn(button)).label, "Loading…");
+}
+
+// Answers the attempt in flight and returns what the button then shows.
+async function answer(page, button, response) {
+  await respond(page, response);
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".vp-copy-button__label").textContent !==
+      "Loading…"
+  );
+  return shownOn(button);
+}
+
+async function clickAndFail(page, button, response) {
+  await clickToSend(page, button);
+  return answer(page, button, response);
+}
+
+const LOGIN_REQUIRED_TOOLTIP =
+  "This post is only shown to signed-in accounts. VideoPaste downloads without your account or cookies, so it can't copy this one.";
+const YTDLP_MISSING_TOOLTIP =
+  "VideoPaste needs yt-dlp to download this video. Install it by running “brew install yt-dlp” in Terminal, then try again.";
+const HELPER_UNREACHABLE_TOOLTIP =
+  "The browser can't reach the VideoPaste helper. In your VideoPaste folder, run “./scripts/build-app.sh” to build the app, then “./scripts/install-videopaste-native-host.sh” to register the helper.";
+
+// Each failure as the new helper (or, for an unreachable helper, the
+// background script) reports it: `prose` is the sentence a helper of any
+// released version sends, `code` what 0.2.0 sends beside it. A failure with
+// no `tooltip` keeps its prose as the tooltip.
+const FAILURES = [
+  {
+    code: "private_post",
+    prose: "This post is private. VideoPaste can only download public posts.",
+    label: "Private post",
+  },
+  {
+    code: "login_required",
+    prose:
+      "This post requires a signed-in account. VideoPaste only downloads public posts without using browser cookies.",
+    label: "Login required",
+    tooltip: LOGIN_REQUIRED_TOOLTIP,
+  },
+  {
+    code: "no_video",
+    prose: "This post doesn’t contain a supported video.",
+    label: "No video",
+  },
+  {
+    code: "unavailable",
+    prose: "This post is unavailable or has been deleted.",
+    label: "Unavailable",
+  },
+  {
+    code: "unavailable",
+    prose:
+      "This video link has expired or is unavailable. Copy a fresh video address and try again.",
+    label: "Unavailable",
+  },
+  {
+    code: "ytdlp_missing",
+    prose:
+      "This looks like a video post rather than a direct video link. Install yt-dlp with “brew install yt-dlp”, or right-click the video and choose Copy Video Address.",
+    label: "Setup needed",
+    tooltip: YTDLP_MISSING_TOOLTIP,
+  },
+  // An unreachable helper: the background script's own sentence, then what
+  // Firefox and Chrome say when no helper is registered or it will not run.
+  ...[
+    "The browser could not reach the VideoPaste helper.",
+    "No such native application com.grantwasil.videopaste",
+    "Specified native messaging host not found.",
+    "Access to the specified native messaging host is forbidden.",
+    "Failed to start native messaging host.",
+    "Native host has exited.",
+  ].map((prose) => ({
+    code: "helper_unreachable",
+    prose,
+    label: "Setup needed",
+    tooltip: HELPER_UNREACHABLE_TOOLTIP,
+  })),
+  // Everything else is `failed`: the helper's remaining sentences, raw
+  // `yt-dlp` output it passes on, and system errors.
+  ...[
+    "That doesn’t look like a complete web address.",
+    "Please paste an http:// or https:// Reddit or X link.",
+    "The helper only accepts Reddit and X video post links.",
+    "The browser requested an unsupported action.",
+    "The video host returned an unreadable response.",
+    "The video host rejected the download (HTTP 500).",
+    "The video host returned an empty video file.",
+    "The download finished, but the video file could not be found.",
+    "The video was saved, but macOS would not copy it to the clipboard.",
+    "Video post download failed.",
+    "yt-dlp could not start: The file “yt-dlp” doesn’t exist.",
+    "ERROR: ffmpeg and ffprobe not found",
+    "ERROR: [generic] Unable to download webpage: HTTP Error 404: Not Found",
+    "ERROR: [Reddit] sb1bhrydqu0i1: No video formats found!",
+    "ERROR: [twitter] 1891234567890123462: This video is protected by a password, use the --video-password option",
+    "ERROR: unable to open for writing: [Errno 2] No such file or directory: 'video.mp4.part'",
+    "A server with the specified hostname could not be found.",
+  ].map((prose) => ({ code: "failed", prose, label: "Try again" })),
+];
+
+async function testFailureLabels(browser, runtimeNamespace) {
+  const { page, button } = await openPlayerFixture(browser, runtimeNamespace);
+
+  for (const failure of FAILURES) {
+    const shown = await clickAndFail(page, button, {
+      ok: false,
+      error: failure.prose,
+      code: failure.code,
+    });
+    assert.equal(
+      shown.label,
+      failure.label,
+      `Code ${failure.code} must be labelled "${failure.label}"`
+    );
+    assert.equal(shown.tooltip, failure.tooltip ?? failure.prose);
+
+    const shownByOlderHelper = await clickAndFail(page, button, {
+      ok: false,
+      error: failure.prose,
+    });
+    assert.equal(
+      shownByOlderHelper.label,
+      failure.label,
+      `With no code, "${failure.prose}" must still be labelled "${failure.label}"`
+    );
+    assert.equal(
+      shownByOlderHelper.tooltip,
+      shown.tooltip,
+      "The tooltip must be the same with an older helper"
+    );
+  }
+
+  assert.equal(
+    (
+      await clickAndFail(page, button, {
+        ok: false,
+        error: "This post is private. VideoPaste can only download public posts.",
+        code: "a_code_from_a_newer_helper",
+      })
+    ).label,
+    "Try again",
+    "An unrecognised code is the catch-all, whatever the prose says"
+  );
+  assert.deepEqual(
+    await clickAndFail(page, button, { ok: false }),
+    { label: "Try again", tooltip: "The video could not be copied." },
+    "A failure that says nothing is the catch-all"
+  );
+
+  await page.close();
+}
+
+const RESTING = {
+  label: "Copy video",
+  tooltip: "Click to copy the video, or drag this control to reposition it",
+};
+const LOGIN_REQUIRED = {
+  label: "Login required",
+  tooltip: LOGIN_REQUIRED_TOOLTIP,
+};
+
+// Stops the page's clock so that only `fastForward` moves its timers.
+async function freezeClock(page) {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+}
+
+// An error is on the button and the pointer is not: it must last 3.2
+// seconds more, then give way to the resting button.
+async function assertResetsIn3200ms(page, button, error) {
+  await page.clock.fastForward(3100);
+  assert.deepEqual(
+    await shownOn(button),
+    error,
+    "An error must last 3.2 seconds after the pointer leaves"
+  );
+  await page.clock.fastForward(200);
+  assert.deepEqual(
+    await shownOn(button),
+    RESTING,
+    "An error must reset 3.2 seconds after the pointer leaves"
+  );
+}
+
+async function testErrorStaysUnderThePointer(browser, runtimeNamespace) {
+  const { page, button } = await openPlayerFixture(browser, runtimeNamespace);
+  await freezeClock(page);
+  const loginRequired = { ok: false, code: "login_required", error: "x" };
+
+  // The click leaves the pointer on the button.
+  assert.deepEqual(
+    await clickAndFail(page, button, loginRequired),
+    LOGIN_REQUIRED
+  );
+  await page.clock.fastForward(60_000);
+  assert.deepEqual(
+    await shownOn(button),
+    LOGIN_REQUIRED,
+    "An error must stay while the pointer is over the button"
+  );
+  await page.mouse.move(0, 0);
+  await assertResetsIn3200ms(page, button, LOGIN_REQUIRED);
+
+  // Coming back to the button before the reset holds the error again.
+  await clickAndFail(page, button, loginRequired);
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(3000);
+  await button.hover();
+  await page.clock.fastForward(60_000);
+  assert.deepEqual(
+    await shownOn(button),
+    LOGIN_REQUIRED,
+    "An error must stay when the pointer returns before the reset"
+  );
+  await page.mouse.move(0, 0);
+  await assertResetsIn3200ms(page, button, LOGIN_REQUIRED);
+
+  // The pointer has already left when the failure arrives. Loading lasts
+  // until the answer, however long that takes.
+  await clickToSend(page, button);
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(60_000);
+  assert.equal(
+    (await shownOn(button)).label,
+    "Loading…",
+    "Loading must last until the helper answers"
+  );
+  assert.deepEqual(
+    await answer(page, button, loginRequired),
+    LOGIN_REQUIRED
+  );
+  await assertResetsIn3200ms(page, button, LOGIN_REQUIRED);
+
+  // A click on a held error starts a new attempt, and success keeps its
+  // own timing: 2.2 seconds, pointer or no pointer.
+  await clickAndFail(page, button, loginRequired);
+  await clickToSend(page, button);
+  assert.equal(
+    (await answer(page, button, { ok: true, status: "copied" })).label,
+    "Copied!"
+  );
+  await page.clock.fastForward(2100);
+  assert.equal((await shownOn(button)).label, "Copied!");
+  await page.clock.fastForward(200);
+  assert.deepEqual(
+    await shownOn(button),
+    RESTING,
+    "Success must reset after 2.2 seconds with the pointer still on the button"
+  );
+
+  // The button still expands under the pointer and still drags.
+  const playerRect = await page.locator("shreddit-player").boundingBox();
+  await button.hover();
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".vp-copy-button").getBoundingClientRect()
+        .width > 90
+  );
+  const dragTarget = { x: playerRect.x + 70, y: playerRect.y + 85 };
+  await page.mouse.down();
+  await page.mouse.move(dragTarget.x, dragTarget.y, { steps: 5 });
+  await page.mouse.up();
+  await page.mouse.move(0, 0);
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".vp-copy-button").getBoundingClientRect()
+        .width <= 32
+  );
+  const draggedRect = await button.boundingBox();
+  assert.ok(
+    Math.abs(draggedRect.x + draggedRect.width / 2 - dragTarget.x) <= 2 &&
+      Math.abs(draggedRect.y + draggedRect.height / 2 - dragTarget.y) <= 2,
+    "Dragging must still place the button at the pointer"
+  );
+
   await page.close();
 }
 
@@ -631,6 +958,8 @@ async function run(runtimeNamespace) {
   const browser = await chromium.launch({ headless: true });
 
   try {
+    await testFailureLabels(browser, runtimeNamespace);
+    await testErrorStaysUnderThePointer(browser, runtimeNamespace);
     await testNewRedditPlayer(browser, runtimeNamespace);
     await testOldRedditNativePlayer(browser, runtimeNamespace);
     await testOldRedditRESPlayer(browser, runtimeNamespace);
