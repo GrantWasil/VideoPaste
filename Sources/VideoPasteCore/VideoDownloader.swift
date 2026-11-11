@@ -63,6 +63,14 @@ public enum VideoDownloadError: LocalizedError {
   }
 }
 
+/// How a source URL is fetched.
+enum DownloadRoute: Equatable {
+  /// The URL is a complete video file, fetched as it is.
+  case directFile(URL)
+  /// The URL is handed to `yt-dlp`.
+  case ytdlp(URL)
+}
+
 public enum VideoDownloader {
   public static func parsedURL(from input: String) throws -> URL {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -75,13 +83,51 @@ public enum VideoDownloader {
     return url
   }
 
-  public static func isDirectVideoURL(_ url: URL) -> Bool {
+  private static func isDirectVideoURL(_ url: URL) -> Bool {
     let host = url.host?.lowercased() ?? ""
     let pathExtension = url.pathExtension.lowercased()
 
     return pathExtension == "mp4"
       || pathExtension == "mov"
       || host == "packaged-media.redd.it"
+  }
+
+  static func route(for sourceURL: URL) -> DownloadRoute {
+    // Repair first: a rendition file ends in `.mp4`, and fetched as a file it
+    // is a silent video.
+    let repairedURL = repairedRedditVideoURL(sourceURL)
+    return isDirectVideoURL(repairedURL)
+      ? .directFile(repairedURL)
+      : .ytdlp(repairedURL)
+  }
+
+  /// Rewrites a `v.redd.it` link that cannot be downloaded whole into that
+  /// video's unsigned HLS manifest URL. A bare `v.redd.it/<id>` link redirects
+  /// to the post, which Reddit only shows to signed-in accounts. A single
+  /// rendition file (`DASH_480.mp4`, `CMAF_720.mp4`) holds picture or sound
+  /// but never both. A manifest URL, and a link on any other host, comes back
+  /// untouched.
+  private static func repairedRedditVideoURL(_ url: URL) -> URL {
+    guard url.host?.lowercased() == "v.redd.it" else {
+      return url
+    }
+
+    let pathComponents = url.path
+      .split(separator: "/", omittingEmptySubsequences: true)
+    guard let videoID = pathComponents.first else {
+      return url
+    }
+
+    let fileExtension = url.pathExtension.lowercased()
+    if fileExtension == "m3u8" || fileExtension == "mpd" {
+      return url
+    }
+
+    var manifest = URLComponents()
+    manifest.scheme = "https"
+    manifest.host = "v.redd.it"
+    manifest.path = "/\(videoID)/HLSPlaylist.m3u8"
+    return manifest.url ?? url
   }
 
   public static func isSupportedSourceURL(_ url: URL) -> Bool {
@@ -233,19 +279,20 @@ public enum VideoDownloader {
   ) async throws -> DownloadedVideo {
     let directory = try outputDirectory ?? defaultOutputDirectory()
 
-    if isDirectVideoURL(sourceURL) {
-      return try await downloadDirectly(from: sourceURL, into: directory)
-    }
+    switch route(for: sourceURL) {
+    case .directFile(let fileURL):
+      return try await downloadDirectly(from: fileURL, into: directory)
+    case .ytdlp(let ytdlpSourceURL):
+      guard let helperURL = locateYTDLP() else {
+        throw VideoDownloadError.downloaderUnavailable
+      }
 
-    guard let helperURL = locateYTDLP() else {
-      throw VideoDownloadError.downloaderUnavailable
+      return try await downloadWithYTDLP(
+        from: ytdlpSourceURL,
+        into: directory,
+        helperURL: helperURL
+      )
     }
-
-    return try await downloadWithYTDLP(
-      from: sourceURL,
-      into: directory,
-      helperURL: helperURL
-    )
   }
 
   public static func defaultOutputDirectory() throws -> URL {
