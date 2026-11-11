@@ -52,7 +52,8 @@ short recordings are appreciated for visible interface changes.
 Please include:
 
 - macOS and browser versions
-- Whether the link was a direct media URL, Reddit post, or X/Twitter post
+- Whether you used the browser button or pasted a link into the Mac app, and
+  whether the video was on Reddit or X/Twitter
 - For X/Twitter, whether the post was public and accessible without signing in
 - Whether `yt-dlp` is installed
 - The exact error shown by VideoPaste
