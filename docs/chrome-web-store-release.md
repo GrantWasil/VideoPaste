@@ -167,22 +167,24 @@ Use the **Privacy Practices** tab to provide:
 
 Suggested single-purpose statement:
 
-> VideoPaste lets a macOS user select a public video on Reddit or X/Twitter,
-> download it through the local VideoPaste companion app, and place the
-> resulting MP4 file on the macOS clipboard.
+> VideoPaste lets a macOS user select a video on Reddit or a public video on
+> X/Twitter, download it through the local VideoPaste companion app, and place
+> the resulting MP4 file on the macOS clipboard.
 
 Suggested `nativeMessaging` justification:
 
-> Native messaging sends the user-selected Reddit or X/Twitter post/media URL
-> and an explicit download command to the locally installed VideoPaste helper.
-> The helper downloads the requested media and places the local MP4 on the
-> macOS clipboard. No project-operated server receives the URL or media.
+> Native messaging sends the address of the video the user selected (the
+> video's media URL on Reddit, or the post link on X/Twitter) and an explicit
+> download command to the locally installed VideoPaste helper. The helper
+> downloads the requested media and places the local MP4 on the macOS
+> clipboard. No project-operated server receives the URL or media.
 
 Suggested site-access justification:
 
 > Access is limited to Reddit, X, and Twitter pages so VideoPaste can identify
-> supported video players, show its user-facing Copy video control, and derive
-> the URL selected by the user. It does not run on unrelated sites.
+> supported video players, show its user-facing Copy video control, and read
+> from the page the address of the video the user selects. It only reads the
+> page and does not run on unrelated sites.
 
 Suggested remote-code answer:
 
@@ -194,19 +196,26 @@ Suggested remote-code answer:
 **Recommended conservative declaration:** disclose both **website content**
 and **web browsing activity/URLs** (using the closest labels in the live
 Dashboard). The extension inspects supported pages locally to locate video
-players, and after a click it sends the selected page/media URL to the local
-helper. Do not mark “no data” merely because the project has no cloud server;
-Google explicitly includes local processing in its disclosure rule.
+players, and after a click it sends the video's media URL on Reddit, or the
+post link on X/Twitter, to the local helper. Do not mark “no data” merely
+because the project has no cloud server; Google explicitly includes local
+processing in its disclosure rule.
 
 The disclosures, listing, extension behavior, and privacy policy must agree.
 At minimum, the public policy should say:
 
 - The extension locally inspects supported Reddit/X/Twitter page content to
   find videos and add the Copy video control.
-- It sends a selected post/media URL and command to the local native helper
-  only after the user clicks the control.
-- The helper contacts Reddit, X/Twitter, their media/CDN hosts, and hosts
-  contacted by `yt-dlp` only to resolve and retrieve the selected public media.
+- It sends the video's media URL on Reddit, or the post link on X/Twitter, and
+  a command to the local native helper only after the user clicks the control.
+- A Reddit media URL can include a time-limited access signature that Reddit
+  placed in the page. It is used only to download that video and is not
+  stored.
+- The extension only reads the page and makes no request to Reddit from the
+  signed-in tab.
+- The helper contacts Reddit's video hosts (`v.redd.it` and related `redd.it`
+  hosts), X/Twitter and their media hosts, and hosts contacted by `yt-dlp` only
+  to retrieve the selected media.
 - Downloaded files and the five recent local paths remain on the Mac.
 - The project has no accounts, analytics, telemetry, advertising, tracking, or
   project-operated server.
@@ -242,14 +251,18 @@ downloading/streaming of copyrighted media.
   authorization.
 - Do not imply affiliation with or endorsement by Reddit, X, or Google.
 
+VideoPaste never reads browser cookies or signs in, and its helper downloads
+anonymously. On Reddit it downloads only a video the page is already showing
+the user, from the address that page contains.
+
 ### Recommended listing language
 
 Include a visible limitation such as:
 
-> VideoPaste works with supported public Reddit and X/Twitter video posts. It
-> does not use browser cookies, access private or login-restricted posts, or
-> bypass access controls. Download only media you own or are authorized to
-> download.
+> VideoPaste never reads browser cookies or signs in to any site. On Reddit it
+> copies a video the page is already showing you, using the address the page
+> contains. On X/Twitter it reaches public posts only. Download only media you
+> own or are authorized to download.
 
 Keep the existing independent-project disclaimer. Do not use Reddit or X
 branding in a way that suggests endorsement.
@@ -273,11 +286,11 @@ Prepare:
 
 The first paragraph should state all material dependencies:
 
-> VideoPaste for Chrome adds a Copy video control to supported public Reddit
-> and X/Twitter videos. It requires macOS 13 or newer and the separately
-> installed VideoPaste companion app/native helper.
+> VideoPaste for Chrome adds a Copy video control to supported Reddit videos
+> and public X/Twitter video posts. It requires macOS 13 or newer and the
+> separately installed VideoPaste companion app/native helper.
 
-Also disclose that X/Twitter and ordinary Reddit post URLs require `yt-dlp`,
+Also disclose that `yt-dlp` is required for all Reddit and X/Twitter copying,
 unless the release companion app bundles that dependency.
 
 ### Graphic assets
@@ -358,11 +371,11 @@ Suggested reviewer instructions:
 2. Provide a direct companion-app download and checksum.
 3. Give exact installation/registration steps.
 4. Explain the `nativeMessaging` warning.
-5. Give one known-working public Reddit post and one public X post.
+5. Give one known-working Reddit video and one public X video post.
 6. Ask the reviewer to click the orange **V**, wait for **Copied!**, then paste
    the MP4 into Finder or a text-capable messaging app.
-7. Explain expected errors for private, deleted, login-restricted, or
-   non-video posts.
+7. Explain the errors to expect when a post is private, deleted, shown only to
+   signed-in accounts, or has no supported video.
 8. Link to source code and the public privacy policy.
 
 ## 8. Distribution, testing, and submission

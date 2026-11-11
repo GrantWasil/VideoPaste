@@ -1,53 +1,22 @@
 import Foundation
 import VideoPasteCore
 
-private enum NativeHostError: LocalizedError {
-  case unsupportedAction
-  case unsupportedHost
-
-  var errorDescription: String? {
-    switch self {
-    case .unsupportedAction:
-      return "The browser requested an unsupported action."
-    case .unsupportedHost:
-      return "The helper only accepts Reddit and X video post links."
-    }
-  }
-}
-
 @main
 struct VideoPasteNativeHost {
   static func main() async {
     let response: NativeDownloadResponse
 
     do {
-      let request = try readRequest()
-      guard request.action == "downloadAndCopy" else {
-        throw NativeHostError.unsupportedAction
-      }
-
-      let sourceURL = try VideoDownloader.parsedURL(from: request.url)
-      guard VideoDownloader.isSupportedSourceURL(sourceURL) else {
-        throw NativeHostError.unsupportedHost
-      }
-
+      let sourceURL = try readRequest().acceptedURL()
       let video = try await VideoDownloader.download(from: sourceURL)
       try FileClipboardWriter.copy(video.fileURL)
       if let historyStore = try? RecentVideoStore() {
         _ = try? historyStore.record(video)
       }
 
-      response = NativeDownloadResponse(
-        ok: true,
-        status: "copied",
-        fileName: video.fileURL.lastPathComponent
-      )
+      response = .copied(fileName: video.fileURL.lastPathComponent)
     } catch {
-      response = NativeDownloadResponse(
-        ok: false,
-        status: "error",
-        error: error.localizedDescription
-      )
+      response = .failure(error)
     }
 
     do {
