@@ -1,6 +1,6 @@
 {
   "name": "videopaste-firefox",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Firefox companion extension for VideoPaste.",
   "engines": {
@@ -9,12 +9,13 @@
   "scripts": {
     "check": "node --check content/runtime.js && node --check content/videopaste.js && node --check background/native-bridge.js",
     "lint:addon": "web-ext lint --source-dir . --self-hosted --ignore-files README.md package.json package-lock.json \"tests/**\"",
-    "test": "npm run check && npm run test:manifest && npm run test:bridge && npm run test:overlay && npm run test:x && npm run test:package",
+    "test": "npm run check && npm run test:release && npm run test:manifest && npm run test:bridge && npm run test:overlay && npm run test:x && npm run test:package",
     "test:bridge": "node tests/native-bridge-test.cjs",
     "test:manifest": "node tests/manifest-policy-test.cjs",
     "test:native": "node tests/native-host-test.cjs",
     "test:overlay": "node tests/overlay-test.cjs",
     "test:package": "../scripts/test-firefox-package.sh",
+    "test:release": "node tests/release-version-test.cjs",
     "test:x": "node tests/x-overlay-test.cjs"
   },
   "devDependencies": {
