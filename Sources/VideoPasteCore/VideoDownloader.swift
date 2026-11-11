@@ -32,14 +32,13 @@ public enum VideoDownloadError: LocalizedError {
       return "Please paste an http:// or https:// Reddit or X link."
     case .downloaderUnavailable:
       return """
-        This looks like a video post rather than a direct video link. \
-        Install yt-dlp with “brew install yt-dlp”, or right-click the video \
-        and choose Copy Video Address.
+        VideoPaste needs yt-dlp to download Reddit and X video. Install it \
+        by running “brew install yt-dlp” in Terminal, then try again.
         """
     case .badServerResponse:
       return "The video host returned an unreadable response."
     case .serverRejected(let statusCode):
-      if statusCode == 403 || statusCode == 404 {
+      if Self.linkIsGone(httpStatus: statusCode) {
         return
           "This video link has expired or is unavailable. Copy a fresh video address and try again."
       }
@@ -64,6 +63,12 @@ public enum VideoDownloadError: LocalizedError {
 }
 
 extension VideoDownloadError {
+  /// Whether a video host's rejection means the link has expired or is
+  /// gone. Any other rejection is one a retry might fix.
+  private static func linkIsGone(httpStatus: Int) -> Bool {
+    httpStatus == 403 || httpStatus == 404
+  }
+
   /// The stable code the helper sends to the browser for this failure.
   public var code: NativeErrorCode {
     switch self {
@@ -76,9 +81,7 @@ extension VideoDownloadError {
     case .unavailablePost:
       return .unavailable
     case .serverRejected(let statusCode):
-      // Matches the prose: only an expired or missing link reads as
-      // unavailable.
-      return statusCode == 403 || statusCode == 404 ? .unavailable : .failed
+      return Self.linkIsGone(httpStatus: statusCode) ? .unavailable : .failed
     case .downloaderUnavailable:
       return .ytdlpMissing
     case .invalidURL, .unsupportedURL, .badServerResponse, .emptyDownload,
@@ -88,7 +91,7 @@ extension VideoDownloadError {
   }
 }
 
-/// How a source URL is fetched.
+/// How a post link or media URL is fetched.
 enum DownloadRoute: Equatable {
   /// The URL is a complete video file, fetched as it is.
   case directFile(URL)
@@ -115,25 +118,44 @@ public enum VideoDownloader {
     return pathExtension == "mp4"
       || pathExtension == "mov"
       || host == "packaged-media.redd.it"
+      || isRedditFileServedAsMP4(url)
   }
 
-  static func route(for sourceURL: URL) -> DownloadRoute {
+  /// A GIF post plays one complete, silent MP4 from a Reddit host other than
+  /// the video host. Its path ends in `.gif`; only the query says the file
+  /// is an MP4 (`preview.redd.it/<id>.gif?format=mp4&s=…`).
+  private static func isRedditFileServedAsMP4(_ url: URL) -> Bool {
+    guard let host = url.host?.lowercased(),
+      host == "redd.it" || host.hasSuffix(".redd.it"),
+      !isRedditVideoHost(host)
+    else {
+      return false
+    }
+
+    let format = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+      .queryItems?
+      .first { $0.name == "format" }?
+      .value
+    return format?.lowercased() == "mp4"
+  }
+
+  static func route(for link: URL) -> DownloadRoute {
     // Repair first: a rendition file ends in `.mp4`, and fetched as a file it
     // is a silent video.
-    let repairedURL = repairedRedditVideoURL(sourceURL)
+    let repairedURL = repairedRedditVideoURL(link)
     return isDirectVideoURL(repairedURL)
       ? .directFile(repairedURL)
       : .ytdlp(repairedURL)
   }
 
-  /// Rewrites a `v.redd.it` link that cannot be downloaded whole into that
-  /// video's unsigned HLS manifest URL. A bare `v.redd.it/<id>` link redirects
+  /// Rewrites a link on Reddit's video host that cannot be downloaded whole
+  /// into that video's unsigned HLS manifest URL on the same host. A bare `v.redd.it/<id>` link redirects
   /// to the post, which Reddit only shows to signed-in accounts. A single
-  /// rendition file (`DASH_480.mp4`, `CMAF_720.mp4`) holds picture or sound
-  /// but never both. A manifest URL, and a link on any other host, comes back
-  /// untouched.
+  /// rendition (`DASH_480.mp4`, `CMAF_720.mp4`, `HLS_720.m3u8`) holds picture
+  /// or sound but never both. A manifest URL for the whole video, and a link
+  /// on any other host, comes back untouched.
   private static func repairedRedditVideoURL(_ url: URL) -> URL {
-    guard url.host?.lowercased() == "v.redd.it" else {
+    guard let host = url.host?.lowercased(), isRedditVideoHost(host) else {
       return url
     }
 
@@ -144,15 +166,31 @@ public enum VideoDownloader {
     }
 
     let fileExtension = url.pathExtension.lowercased()
-    if fileExtension == "m3u8" || fileExtension == "mpd" {
+    let isManifest = fileExtension == "m3u8" || fileExtension == "mpd"
+    if isManifest, !namesSingleRendition(pathComponents.last ?? "") {
       return url
     }
 
     var manifest = URLComponents()
     manifest.scheme = "https"
-    manifest.host = "v.redd.it"
+    manifest.host = host
     manifest.path = "/\(videoID)/HLSPlaylist.m3u8"
     return manifest.url ?? url
+  }
+
+  /// Whether `host`, in lowercase, serves Reddit-hosted video: `v.redd.it`
+  /// or one of its subdomains, such as `cf.v.redd.it`.
+  private static func isRedditVideoHost(_ host: String) -> Bool {
+    host == "v.redd.it" || host.hasSuffix(".v.redd.it")
+  }
+
+  /// Whether a file on Reddit's video host is one rendition of a video
+  /// rather than the whole of it, whatever its extension.
+  private static func namesSingleRendition(
+    _ fileName: some StringProtocol
+  ) -> Bool {
+    let name = fileName.uppercased()
+    return ["HLS_", "DASH_", "CMAF_"].contains { name.hasPrefix($0) }
   }
 
   public static func isSupportedSourceURL(_ url: URL) -> Bool {
@@ -307,13 +345,13 @@ public enum VideoDownloader {
     switch route(for: sourceURL) {
     case .directFile(let fileURL):
       return try await downloadDirectly(from: fileURL, into: directory)
-    case .ytdlp(let ytdlpSourceURL):
+    case .ytdlp(let link):
       guard let helperURL = locateYTDLP() else {
         throw VideoDownloadError.downloaderUnavailable
       }
 
       return try await downloadWithYTDLP(
-        from: ytdlpSourceURL,
+        from: link,
         into: directory,
         helperURL: helperURL
       )

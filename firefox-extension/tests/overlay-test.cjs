@@ -139,11 +139,7 @@ async function testNewRedditPlayer(browser, runtimeNamespace) {
   );
 
   await directButton.hover();
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".vp-copy-button").getBoundingClientRect()
-        .width > 90
-  );
+  await waitUntilExpanded(page, directButton, true);
   const expandedButtonRect = await directButton.boundingBox();
   assert.ok(expandedButtonRect);
   assert.ok(
@@ -162,63 +158,16 @@ async function testNewRedditPlayer(browser, runtimeNamespace) {
     `The expanded label should have right breathing room (got ${rightTextPadding}px)`
   );
 
-  const directPlayerRect = await page
-    .locator("#feed-player")
-    .boundingBox();
-  assert.ok(directPlayerRect);
-  const dragTarget = {
-    x: directPlayerRect.x + 70,
-    y: directPlayerRect.y + 85,
-  };
-  await page.mouse.move(
-    expandedButtonRect.x + 15,
-    expandedButtonRect.y + expandedButtonRect.height / 2
-  );
-  await page.mouse.down();
-  await page.mouse.move(dragTarget.x, dragTarget.y, { steps: 5 });
-  await page.mouse.up();
-  await page.mouse.move(0, 0);
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".vp-copy-button").getBoundingClientRect()
-        .width <= 32
-  );
+  await assertDragsTo(page, directButton, page.locator("#feed-player"), {
+    x: 70,
+    y: 85,
+  });
 
-  const draggedButtonRect = await directButton.boundingBox();
-  assert.ok(draggedButtonRect);
-  assert.ok(
-    Math.abs(
-      draggedButtonRect.x + draggedButtonRect.width / 2 - dragTarget.x
-    ) <= 2,
-    "Dragging should place the compact V at the pointer location"
-  );
-  assert.ok(
-    draggedButtonRect.x >= directPlayerRect.x &&
-      draggedButtonRect.y >= directPlayerRect.y &&
-      draggedButtonRect.x + draggedButtonRect.width <=
-        directPlayerRect.x + directPlayerRect.width &&
-      draggedButtonRect.y + draggedButtonRect.height <=
-        directPlayerRect.y + directPlayerRect.height,
-    "The dragged V must remain inside the video"
-  );
   assert.equal(
-    await page.evaluate(() => window.__vpNativeMessages.length),
-    0,
-    "Dragging the V must not trigger a download"
-  );
-
-  await directButton.click();
-  assert.match(await directButton.textContent(), /Loading/);
-  const directMessage = await page.evaluate(
-    () => window.__vpNativeMessages.at(-1)
-  );
-  assert.equal(directMessage.type, "vp-download-and-copy");
-  assert.equal(
-    directMessage.url,
+    (await clickToSend(page, directButton)).url,
     SIGNED_HLS_URL,
     "New Reddit must send the player's signed manifest URL untouched"
   );
-  assert.deepEqual(Object.keys(directMessage).sort(), ["type", "url"]);
   await respond(page, {
     ok: true,
     status: "copied",
@@ -353,19 +302,59 @@ async function testNewRedditPlayer(browser, runtimeNamespace) {
     "The expanded shadow-DOM control must remain inside the video"
   );
 
-  const shadowMessage = await clickAndReadMessage(
-    page,
-    page.locator("#shadow-player .vp-copy-button")
-  );
   assert.equal(
-    shadowMessage.url,
+    await urlSentOnClick(
+      page,
+      page.locator("#shadow-player .vp-copy-button")
+    ),
     SIGNED_HLS_URL,
     "A playing new Reddit player must still send its manifest, never the packaged MP4"
   );
   await page.close();
 }
 
-async function clickAndReadMessage(page, button) {
+// New Reddit has named its player three ways. Its markup can put the button
+// on a wrapper inside the player, while the manifest URL is on the player.
+async function testNewRedditPlayerNames(browser, runtimeNamespace) {
+  for (const playerName of [
+    "shreddit-player",
+    "shreddit-player-2",
+    "reddit-video-player",
+  ]) {
+    const page = await openFixture(
+      browser,
+      runtimeNamespace,
+      `
+        <${playerName}
+          src="${SIGNED_HLS_URL.replaceAll("&", "&amp;")}"
+          style="display: block; height: 225px; width: 400px;"
+        >
+          <div
+            data-testid="video-player"
+            style="height: 150px; margin-top: 60px; width: 300px;"
+          >
+            <video src="blob:https://www.reddit.com/example"></video>
+          </div>
+        </${playerName}>
+      `
+    );
+
+    const wrapperButton = page.locator(
+      "[data-testid='video-player'] > .vp-copy-button"
+    );
+    await wrapperButton.waitFor();
+    assert.equal(
+      await urlSentOnClick(page, wrapperButton),
+      SIGNED_HLS_URL,
+      `A button inside <${playerName}> must send that player's manifest URL`
+    );
+    await page.close();
+  }
+}
+
+// Clicks, checks the click started exactly one attempt, and returns the
+// message that went to the helper. The attempt is left in flight.
+async function clickToSend(page, button) {
   const sentBefore = (await sentMessages(page)).length;
   await button.click();
   const messages = await sentMessages(page);
@@ -376,8 +365,76 @@ async function clickAndReadMessage(page, button) {
   );
   const message = messages.at(-1);
   assert.equal(message.type, "vp-download-and-copy");
-  await respond(page, { ok: true, status: "copied" });
+  assert.deepEqual(Object.keys(message).sort(), ["type", "url"]);
+  assert.equal((await shownOn(button)).label, "Loading…");
   return message;
+}
+
+// The URL one click sends. The attempt is answered, so the button can be
+// clicked again.
+async function urlSentOnClick(page, button) {
+  const { url } = await clickToSend(page, button);
+  await respond(page, { ok: true, status: "copied" });
+  return url;
+}
+
+function shownOn(button) {
+  return button.evaluate((button) => ({
+    label: button.querySelector(".vp-copy-button__label").textContent,
+    tooltip: button.title,
+  }));
+}
+
+// Waits for the button to open out to show its label, or to close back to
+// the compact V.
+async function waitUntilExpanded(page, button, expanded) {
+  await page.waitForFunction(
+    ([element, expanded]) => {
+      const { width } = element.getBoundingClientRect();
+      return expanded ? width > 90 : width <= 32;
+    },
+    [await button.elementHandle(), expanded]
+  );
+}
+
+// Drags the button, expanded under the pointer, to a point in its player.
+// The compact button must land on that point, inside the player, and the
+// drag must not start a download.
+async function assertDragsTo(page, button, player, offset) {
+  const playerRect = await player.boundingBox();
+  const target = { x: playerRect.x + offset.x, y: playerRect.y + offset.y };
+  const sentBefore = (await sentMessages(page)).length;
+  await button.hover();
+  await waitUntilExpanded(page, button, true);
+  const expandedRect = await button.boundingBox();
+  await page.mouse.move(
+    expandedRect.x + 15,
+    expandedRect.y + expandedRect.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 5 });
+  await page.mouse.up();
+  await page.mouse.move(0, 0);
+  await waitUntilExpanded(page, button, false);
+
+  const draggedRect = await button.boundingBox();
+  assert.ok(
+    Math.abs(draggedRect.x + draggedRect.width / 2 - target.x) <= 2 &&
+      Math.abs(draggedRect.y + draggedRect.height / 2 - target.y) <= 2,
+    "Dragging must place the compact V at the pointer"
+  );
+  assert.ok(
+    draggedRect.x >= playerRect.x &&
+      draggedRect.y >= playerRect.y &&
+      draggedRect.x + draggedRect.width <= playerRect.x + playerRect.width &&
+      draggedRect.y + draggedRect.height <= playerRect.y + playerRect.height,
+    "The dragged V must remain inside the video"
+  );
+  assert.equal(
+    (await sentMessages(page)).length,
+    sentBefore,
+    "Dragging the V must not trigger a download"
+  );
 }
 
 // Markup written from the live old Reddit pages recorded in issue #23.
@@ -461,12 +518,12 @@ async function testOldRedditNativePlayer(browser, runtimeNamespace) {
   assert.equal(await crosspostButton.count(), 1);
 
   assert.equal(
-    (await clickAndReadMessage(page, postButton)).url,
+    await urlSentOnClick(page, postButton),
     "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8?a=1796935256%2Csignature&v=1&f=sd",
     "Old Reddit's own player must send its signed HLS manifest untouched"
   );
   assert.equal(
-    (await clickAndReadMessage(page, crosspostButton)).url,
+    await urlSentOnClick(page, crosspostButton),
     "https://v.redd.it/q42ef3o5xx881/HLSPlaylist.m3u8?a=1796935256%2Csignature&v=1&f=sd",
     "An intact crosspost must send the original video's signed manifest"
   );
@@ -475,7 +532,7 @@ async function testOldRedditNativePlayer(browser, runtimeNamespace) {
     .locator("#crosspost-player")
     .evaluate((player) => player.removeAttribute("data-hls-url"));
   assert.equal(
-    (await clickAndReadMessage(page, crosspostButton)).url,
+    await urlSentOnClick(page, crosspostButton),
     "https://v.redd.it/q42ef3o5xx881/DASHPlaylist.mpd?a=1796935256%2Csignature&v=1&f=sd",
     "Without an HLS manifest the player's DASH manifest is sent"
   );
@@ -550,7 +607,7 @@ async function testOldRedditRESPlayer(browser, runtimeNamespace) {
     "A player expanded after page load gets one button"
   );
   assert.equal(
-    (await clickAndReadMessage(page, button)).url,
+    await urlSentOnClick(page, button),
     "https://v.redd.it/sb1bhrydqu0i1/HLSPlaylist.m3u8",
     "Under RES the manifest URL is built from the post row's v.redd.it id"
   );
@@ -578,7 +635,7 @@ async function testGIFPost(browser, runtimeNamespace) {
   const button = page.locator(".vp-copy-button");
   await button.waitFor();
   assert.equal(
-    (await clickAndReadMessage(page, button)).url,
+    await urlSentOnClick(page, button),
     "https://preview.redd.it/abc123example.gif?width=480&format=mp4&s=signature",
     "A GIF post's complete MP4 is sent as it is"
   );
@@ -651,30 +708,6 @@ async function openPlayerFixture(browser, runtimeNamespace) {
   return { page, button };
 }
 
-function shownOn(button) {
-  return button.evaluate((button) => ({
-    label: button.querySelector(".vp-copy-button__label").textContent,
-    tooltip: button.title,
-  }));
-}
-
-// Clicks and checks the click started exactly one attempt.
-async function clickToSend(page, button) {
-  const sentBefore = (await sentMessages(page)).length;
-  await button.click();
-  const messages = await sentMessages(page);
-  assert.equal(
-    messages.length,
-    sentBefore + 1,
-    "One click must send exactly one message"
-  );
-  assert.deepEqual(messages.at(-1), {
-    type: "vp-download-and-copy",
-    url: SIGNED_HLS_URL,
-  });
-  assert.equal((await shownOn(button)).label, "Loading…");
-}
-
 // Answers the attempt in flight and returns what the button then shows.
 async function answer(page, button, response) {
   await respond(page, response);
@@ -696,13 +729,12 @@ const LOGIN_REQUIRED_TOOLTIP =
 const YTDLP_MISSING_TOOLTIP =
   "VideoPaste needs yt-dlp to download this video. Install it by running “brew install yt-dlp” in Terminal, then try again.";
 const HELPER_UNREACHABLE_TOOLTIP =
-  "The browser can't reach the VideoPaste helper. In your VideoPaste folder, run “./scripts/build-app.sh” to build the app, then “./scripts/install-videopaste-native-host.sh” to register the helper.";
+  "The browser got no answer from the VideoPaste helper: it isn't set up, or it stopped before answering. To set it up or repair it, open Terminal in your VideoPaste folder and run “./scripts/build-app.sh”, then “./scripts/install-videopaste-native-host.sh”.";
 
-// Each failure as the new helper (or, for an unreachable helper, the
-// background script) reports it: `prose` is the sentence a helper of any
-// released version sends, `code` what 0.2.0 sends beside it. A failure with
-// no `tooltip` keeps its prose as the tooltip.
-const FAILURES = [
+// Each failure a helper can send. `prose` is all a v0.1 helper sends; a
+// 0.2.0 helper sends `code` beside its prose. A failure with no `tooltip`
+// keeps its prose as the tooltip.
+const HELPER_FAILURES = [
   {
     code: "private_post",
     prose: "This post is private. VideoPaste can only download public posts.",
@@ -738,27 +770,13 @@ const FAILURES = [
     label: "Setup needed",
     tooltip: YTDLP_MISSING_TOOLTIP,
   },
-  // An unreachable helper: the background script's own sentence, then what
-  // Firefox and Chrome say when no helper is registered or it will not run.
-  ...[
-    "The browser could not reach the VideoPaste helper.",
-    "No such native application com.grantwasil.videopaste",
-    "Specified native messaging host not found.",
-    "Access to the specified native messaging host is forbidden.",
-    "Failed to start native messaging host.",
-    "Native host has exited.",
-  ].map((prose) => ({
-    code: "helper_unreachable",
-    prose,
-    label: "Setup needed",
-    tooltip: HELPER_UNREACHABLE_TOOLTIP,
-  })),
   // Everything else is `failed`: the helper's remaining sentences, raw
   // `yt-dlp` output it passes on, and system errors.
   ...[
     "That doesn’t look like a complete web address.",
     "Please paste an http:// or https:// Reddit or X link.",
     "The helper only accepts Reddit and X video post links.",
+    "The helper only accepts Reddit and X links.",
     "The browser requested an unsupported action.",
     "The video host returned an unreadable response.",
     "The video host rejected the download (HTTP 500).",
@@ -779,7 +797,7 @@ const FAILURES = [
 async function testFailureLabels(browser, runtimeNamespace) {
   const { page, button } = await openPlayerFixture(browser, runtimeNamespace);
 
-  for (const failure of FAILURES) {
+  for (const failure of HELPER_FAILURES) {
     const shown = await clickAndFail(page, button, {
       ok: false,
       error: failure.prose,
@@ -805,6 +823,22 @@ async function testFailureLabels(browser, runtimeNamespace) {
       shownByOlderHelper.tooltip,
       shown.tooltip,
       "The tooltip must be the same with an older helper"
+    );
+  }
+
+  // An unreachable helper is reported by the background script, which
+  // always sets the code. The browser's own words stand in for the prose.
+  for (const prose of [
+    "No such native application com.grantwasil.videopaste",
+    "Native host has exited.",
+  ]) {
+    assert.deepEqual(
+      await clickAndFail(page, button, {
+        ok: false,
+        error: prose,
+        code: "helper_unreachable",
+      }),
+      { label: "Setup needed", tooltip: HELPER_UNREACHABLE_TOOLTIP }
     );
   }
 
@@ -843,8 +877,8 @@ async function freezeClock(page) {
   await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
 }
 
-// An error is on the button and the pointer is not: it must last 3.2
-// seconds more, then give way to the resting button.
+// An error is on the button and no pointer is resting there: it must last
+// 3.2 seconds more, then give way to the resting button.
 async function assertResetsIn3200ms(page, button, error) {
   await page.clock.fastForward(3100);
   assert.deepEqual(
@@ -927,29 +961,63 @@ async function testErrorStaysUnderThePointer(browser, runtimeNamespace) {
   );
 
   // The button still expands under the pointer and still drags.
-  const playerRect = await page.locator("shreddit-player").boundingBox();
-  await button.hover();
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".vp-copy-button").getBoundingClientRect()
-        .width > 90
+  await assertDragsTo(page, button, page.locator("shreddit-player"), {
+    x: 70,
+    y: 85,
+  });
+
+  await page.close();
+}
+
+// Taps the button with a finger on a device that also has a mouse, such as
+// a laptop with a touch screen. The browser goes on treating the button as
+// hovered after the finger lifts.
+async function tap(page, button) {
+  const rect = await button.boundingBox();
+  const devTools = await page.context().newCDPSession(page);
+  await devTools.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
+    ],
+  });
+  await devTools.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await devTools.detach();
+}
+
+async function testErrorResetsAfterATap(browser, runtimeNamespace) {
+  const { page, button } = await openPlayerFixture(browser, runtimeNamespace);
+  await freezeClock(page);
+  const loginRequired = { ok: false, code: "login_required", error: "x" };
+
+  await tap(page, button);
+  await page.waitForFunction(() => window.__vpNativeMessages.length === 1);
+  assert.equal(
+    await button.evaluate((button) => button.matches(".vp-copy-button:hover")),
+    true,
+    "The fixture must leave the button hovered, as a real tap does"
   );
-  const dragTarget = { x: playerRect.x + 70, y: playerRect.y + 85 };
-  await page.mouse.down();
-  await page.mouse.move(dragTarget.x, dragTarget.y, { steps: 5 });
-  await page.mouse.up();
+  // No pointer is resting on the button, so the error does not wait for one
+  // to leave.
+  assert.deepEqual(await answer(page, button, loginRequired), LOGIN_REQUIRED);
+  await assertResetsIn3200ms(page, button, LOGIN_REQUIRED);
+
+  // The mouse on the same device still holds an error.
+  assert.deepEqual(
+    await clickAndFail(page, button, loginRequired),
+    LOGIN_REQUIRED
+  );
+  await page.clock.fastForward(60_000);
+  assert.deepEqual(
+    await shownOn(button),
+    LOGIN_REQUIRED,
+    "A mouse resting on the button must hold the error after an earlier tap"
+  );
   await page.mouse.move(0, 0);
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".vp-copy-button").getBoundingClientRect()
-        .width <= 32
-  );
-  const draggedRect = await button.boundingBox();
-  assert.ok(
-    Math.abs(draggedRect.x + draggedRect.width / 2 - dragTarget.x) <= 2 &&
-      Math.abs(draggedRect.y + draggedRect.height / 2 - dragTarget.y) <= 2,
-    "Dragging must still place the button at the pointer"
-  );
+  await assertResetsIn3200ms(page, button, LOGIN_REQUIRED);
 
   await page.close();
 }
@@ -960,7 +1028,9 @@ async function run(runtimeNamespace) {
   try {
     await testFailureLabels(browser, runtimeNamespace);
     await testErrorStaysUnderThePointer(browser, runtimeNamespace);
+    await testErrorResetsAfterATap(browser, runtimeNamespace);
     await testNewRedditPlayer(browser, runtimeNamespace);
+    await testNewRedditPlayerNames(browser, runtimeNamespace);
     await testOldRedditNativePlayer(browser, runtimeNamespace);
     await testOldRedditRESPlayer(browser, runtimeNamespace);
     await testGIFPost(browser, runtimeNamespace);

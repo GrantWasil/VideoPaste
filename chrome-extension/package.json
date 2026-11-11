@@ -8,8 +8,9 @@
   },
   "scripts": {
     "check": "node --check content/runtime.js && node --check content/videopaste.js && node --check background/native-bridge.js",
-    "test": "npm run check && npm run test:release && npm run test:bridge && npm run test:manifest && npm run test:native-manifests && npm run test:shared && npm run test:x && npm run test:package",
+    "test": "npm run check && npm run test:release && npm run test:codes && npm run test:bridge && npm run test:manifest && npm run test:native-manifests && npm run test:shared && npm run test:x && npm run test:package",
     "test:bridge": "node tests/native-bridge-test.cjs",
+    "test:codes": "node ../firefox-extension/tests/error-codes-test.cjs",
     "test:manifest": "node tests/manifest-test.cjs",
     "test:native": "node ../firefox-extension/tests/native-host-test.cjs",
     "test:native-manifests": "node tests/native-host-manifest-test.cjs",

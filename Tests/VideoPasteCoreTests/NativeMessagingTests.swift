@@ -110,7 +110,7 @@ extension NativeMessagingTests {
       ),
       (
         NativeDownloadRequest(url: "https://example.com/video.mp4"),
-        "The helper only accepts Reddit and X video post links."
+        "The helper only accepts Reddit and X links."
       ),
       (
         NativeDownloadRequest(url: "not a link"),

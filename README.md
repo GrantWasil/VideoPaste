@@ -141,9 +141,10 @@ moved to a different folder, because the registration holds the helper's full
 path.
 
 In 0.2.0, each half keeps working with the 0.1 version of the other. Updating
-the extension alone makes Reddit copying work again. Rebuilding the app adds
-the exact **Login required** and **Setup needed** button labels and makes a
-pasted `v.redd.it` video link work in the Mac app.
+the extension alone makes Reddit copying work again, with the new button
+labels. Rebuilding the app makes those labels come from an error code the
+helper sends instead of from matching the wording of its messages, and makes a
+pasted `v.redd.it` video link download with sound in the Mac app.
 
 ## Install browser development builds
 

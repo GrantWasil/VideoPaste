@@ -370,7 +370,8 @@ async function run() {
     await privateFixture.page.evaluate(() => {
       window.__vpNativeResolvers.shift()({
         ok: false,
-        error: "This X post is private or protected.",
+        error:
+          "This post is private. VideoPaste can only download public posts.",
       });
     });
     await privateFixture.page.waitForFunction(
@@ -380,7 +381,7 @@ async function run() {
     );
     assert.equal(
       await privateButton.getAttribute("title"),
-      "This X post is private or protected."
+      "This post is private. VideoPaste can only download public posts."
     );
     await privateFixture.context.close();
 

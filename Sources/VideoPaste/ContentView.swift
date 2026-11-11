@@ -100,7 +100,7 @@ struct ContentView: View {
       }
 
       Text(
-        "Direct video addresses work immediately. Reddit and public X post links require yt-dlp."
+        "Paste a v.redd.it video link or an X/Twitter post link. Both need yt-dlp."
       )
       .font(.caption)
       .foregroundStyle(.tertiary)

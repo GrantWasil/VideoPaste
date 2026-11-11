@@ -45,6 +45,8 @@ Trash or permanently erase those files.
 
 VideoPaste connects only as needed to retrieve requested media:
 
+- The host in a media URL you paste into the Mac app: a pasted `.mp4` or
+  `.mov` address is downloaded from whatever host it names
 - Reddit's video hosts (`v.redd.it` and related `redd.it` hosts) for Reddit
   videos
 - X, Twitter, and their media hosts for public X/Twitter video posts
