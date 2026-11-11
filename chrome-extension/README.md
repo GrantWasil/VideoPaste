@@ -8,7 +8,7 @@ the VideoPaste app window.
 
 ## Install the public beta
 
-Install `yt-dlp`, which is required for X/Twitter and Reddit post URLs, then
+Install `yt-dlp`, which is required for all Reddit and X/Twitter copying, then
 build the app and register its native helper for Firefox and Chrome from the
 project root:
 
@@ -35,8 +35,11 @@ same local helper. The packaging script removes the development-only `key`
 field from the upload ZIP so it cannot conflict with the Store-assigned item
 identity.
 
-X support is limited to public video posts that `yt-dlp` can reach without an
-account or browser cookies.
+On Reddit, VideoPaste copies videos hosted on Reddit. It copies a video the
+page is already showing you, using the address the page contains. On X/Twitter
+it reaches public video posts only: those `yt-dlp` can reach without an account
+or browser cookies. VideoPaste never reads Chrome cookies or signs in to either
+site.
 
 ## Package
 
