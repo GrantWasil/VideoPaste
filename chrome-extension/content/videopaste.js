@@ -192,10 +192,12 @@
       opacity: 0 !important;
     }
   `;
+  // New Reddit's player, under each name it has had. Its `src` holds the
+  // manifest URL.
+  const NEW_REDDIT_PLAYER_SELECTOR =
+    "shreddit-player, shreddit-player-2, reddit-video-player";
   const PLAYER_SELECTOR = [
-    "shreddit-player",
-    "shreddit-player-2",
-    "reddit-video-player",
+    NEW_REDDIT_PLAYER_SELECTOR,
     "[data-testid='video-player']",
     "[data-testid='post-media']",
     "[data-testid='videoPlayer']",
@@ -495,7 +497,7 @@
     return hostname === "v.redd.it" || hostname.endsWith(".v.redd.it");
   }
 
-  // New Reddit: the player's `src` is a signed HLS playlist.
+  // New Reddit: the player's `src` is a signed HLS manifest URL.
   function newRedditManifestURL(player) {
     const source = readMediaURL(player.getAttribute("src"));
     return source &&
@@ -566,7 +568,7 @@
   // here makes a request to Reddit (ADR 0001).
   function findRedditMediaURL(container) {
     const player =
-      closestAcrossRoots(container, "shreddit-player") ?? container;
+      closestAcrossRoots(container, NEW_REDDIT_PLAYER_SELECTOR) ?? container;
     return (
       newRedditManifestURL(player) ??
       oldRedditManifestURL(player) ??
@@ -575,7 +577,7 @@
     );
   }
 
-  function findXPostURL(container) {
+  function findXPostLink(container) {
     const directStatusLink = closestAcrossRoots(
       container,
       "a[href*='/status/']"
@@ -662,7 +664,7 @@
 
   const site = isXHostname(window.location.hostname)
     ? {
-        findSourceURL: findXPostURL,
+        findLink: findXPostLink,
         notFound: {
           label: "Post unavailable",
           tooltip:
@@ -670,7 +672,7 @@
         },
       }
     : {
-        findSourceURL: findRedditMediaURL,
+        findLink: findRedditMediaURL,
         notFound: {
           label: "No video",
           tooltip:
@@ -714,36 +716,49 @@
     }, delay);
   }
 
-  // A touch leaves `:hover` set after the finger lifts, so the pointer only
-  // counts as resting on the button where the device has one that hovers.
-  // The class is part of the selector because a bare `:hover` matches only
-  // links on a page in quirks mode.
-  function pointerIsOver(button) {
+  // Whether a mouse or pen is resting on the button. A finger never rests:
+  // it is gone once it has tapped, though the browser goes on matching
+  // `:hover`, so only the pointer events say what kind of pointer came and
+  // went. `:hover` is still checked, in case a disabled button, which this
+  // one is while loading, did not report the pointer leaving. The class is
+  // part of the selector because a bare `:hover` matches only links on a
+  // page in quirks mode.
+  function pointerRestsOn(button) {
     return (
-      window.matchMedia("(hover: hover)").matches &&
+      button.vpPointerResting === true &&
       button.matches(`.${BUTTON_CLASS}:hover`)
     );
   }
 
-  // An error stays while the pointer is on the button, so its tooltip can
+  // An error stays while a pointer rests on the button, so its tooltip can
   // be read, and resets a fixed time after the pointer leaves.
   function showError(button, { label, tooltip }) {
     button.title = tooltip;
     setButtonState(button, label, ERROR_CLASS);
-    if (!pointerIsOver(button)) {
+    if (!pointerRestsOn(button)) {
       resetAfter(button, ERROR_RESET_DELAY);
     }
   }
 
-  function keepErrorWhilePointerIsOver(button) {
+  function keepErrorWhilePointerRests(button) {
     const showsError = () => button.classList.contains(ERROR_CLASS);
+    const canRest = (event) =>
+      event.pointerType === "mouse" || event.pointerType === "pen";
 
-    button.addEventListener("pointerenter", () => {
+    button.addEventListener("pointerenter", (event) => {
+      if (!canRest(event)) {
+        return;
+      }
+      button.vpPointerResting = true;
       if (showsError()) {
         window.clearTimeout(button.vpResetTimer);
       }
     });
-    button.addEventListener("pointerleave", () => {
+    button.addEventListener("pointerleave", (event) => {
+      if (!canRest(event)) {
+        return;
+      }
+      button.vpPointerResting = false;
       if (showsError()) {
         resetAfter(button, ERROR_RESET_DELAY);
       }
@@ -777,42 +792,29 @@
       {
         label: "Setup needed",
         tooltip:
-          "The browser can't reach the VideoPaste helper. In your VideoPaste folder, run “./scripts/build-app.sh” to build the app, then “./scripts/install-videopaste-native-host.sh” to register the helper.",
+          "The browser got no answer from the VideoPaste helper: it isn't set up, or it stopped before answering. To set it up or repair it, open Terminal in your VideoPaste folder and run “./scripts/build-app.sh”, then “./scripts/install-videopaste-native-host.sh”.",
       },
     ],
     ["failed", { label: "Try again" }],
   ]);
 
-  // An older helper sends prose and no code, so the code is worked out from
-  // the prose. Only a sentence VideoPaste wrote is read for meaning, and it
+  // A v0.1 helper sends prose and no code, so the code is worked out from
+  // the prose. Only a sentence that helper wrote is read for meaning, and it
   // is recognised by how it opens. Whatever else the helper passes on (raw
   // `yt-dlp` output, a system error) is `failed`, the code the current
   // helper gives it: a phrase such as "not found" inside downloader output
-  // never picks a label.
+  // never picks a label. An unreachable helper is not here: the background
+  // script reports it and always sets the code.
   const PROSE_CODES = [
     [
       /^this looks like a video post rather than a direct video link\b/,
       "ytdlp_missing",
     ],
     [/^this post requires a signed-in account\b/, "login_required"],
-    [/^this (?:x )?post is (?:private|protected)\b/, "private_post"],
-    [
-      /^this post (?:doesn['’]t|does not) contain a supported video\b/,
-      "no_video",
-    ],
+    [/^this post is private\b/, "private_post"],
+    [/^this post doesn’t contain a supported video\b/, "no_video"],
     [/^this post is unavailable\b/, "unavailable"],
     [/^this video link has expired or is unavailable\b/, "unavailable"],
-    // An unreachable helper is reported in the background script's own
-    // sentence, or in the browser's when no helper is registered or the
-    // helper will not run.
-    [
-      /^the browser could not reach the videopaste helper\b/,
-      "helper_unreachable",
-    ],
-    [
-      /\bnative (?:messaging host|host|application)\b/,
-      "helper_unreachable",
-    ],
   ];
 
   function codeFromProse(prose) {
@@ -873,7 +875,7 @@
         return;
       }
 
-      const sourceURL = site.findSourceURL(container);
+      const sourceURL = site.findLink(container);
       if (!sourceURL) {
         showError(button, site.notFound);
         return;
@@ -906,7 +908,7 @@
         showError(button, failureFeedback(response));
       }
     });
-    keepErrorWhilePointerIsOver(button);
+    keepErrorWhilePointerRests(button);
     enableButtonDragging(button, container);
 
     return button;
