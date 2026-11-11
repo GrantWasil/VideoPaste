@@ -667,7 +667,6 @@
           label: "Post unavailable",
           tooltip:
             "VideoPaste couldn't identify a public X post for this video.",
-          resetDelay: 1800,
         },
       }
     : {
@@ -676,75 +675,168 @@
           label: "No video",
           tooltip:
             "VideoPaste copies videos hosted on Reddit. This one is an ad or is hosted somewhere else.",
-          resetDelay: 3200,
         },
       };
 
-  function showFeedback(
-    button,
-    message,
-    modifierClass,
-    resetDelay = 1800
-  ) {
+  const RESTING_TOOLTIP =
+    "Click to copy the video, or drag this control to reposition it";
+  const LOADING_CLASS = "vp-copy-button--loading";
+  const SENT_CLASS = "vp-copy-button--sent";
+  const ERROR_CLASS = "vp-copy-button--error";
+  const SENT_RESET_DELAY = 2200;
+  const ERROR_RESET_DELAY = 3200;
+
+  // Puts the button in one state: loading, sent, error, or (with no state
+  // class) resting. Any reset an earlier state had pending is dropped.
+  function setButtonState(button, labelText, stateClass = null) {
     const label = button.querySelector(".vp-copy-button__label");
     if (!label) {
       return;
     }
 
-    window.clearTimeout(button.vpFeedbackTimer);
-    button.classList.remove(
-      "vp-copy-button--loading",
-      "vp-copy-button--sent",
-      "vp-copy-button--error"
-    );
-    button.classList.add(modifierClass);
-    label.textContent = message;
+    window.clearTimeout(button.vpResetTimer);
+    button.classList.remove(LOADING_CLASS, SENT_CLASS, ERROR_CLASS);
+    if (stateClass) {
+      button.classList.add(stateClass);
+    }
+    label.textContent = labelText;
     button.setAttribute(
       "aria-busy",
-      modifierClass === "vp-copy-button--loading" ? "true" : "false"
+      stateClass === LOADING_CLASS ? "true" : "false"
     );
-
-    if (resetDelay === null) {
-      return;
-    }
-
-    button.vpFeedbackTimer = window.setTimeout(() => {
-      button.classList.remove(
-        "vp-copy-button--loading",
-        "vp-copy-button--sent",
-        "vp-copy-button--error"
-      );
-      label.textContent = "Copy video";
-      button.setAttribute("aria-busy", "false");
-      button.title =
-        "Click to copy the video, or drag this control to reposition it";
-    }, resetDelay);
   }
 
-  function errorFeedbackMessage(message) {
-    const normalizedMessage = String(message ?? "").toLowerCase();
+  function resetAfter(button, delay) {
+    window.clearTimeout(button.vpResetTimer);
+    button.vpResetTimer = window.setTimeout(() => {
+      setButtonState(button, "Copy video");
+      button.title = RESTING_TOOLTIP;
+    }, delay);
+  }
 
-    if (/\b(private|protected)\b/.test(normalizedMessage)) {
-      return "Private post";
-    }
-    if (
-      /\b(no|without)\b.*\bvideo\b/.test(normalizedMessage) ||
-      /\bdoes(?: not|n't|n’t) (?:contain|have)\b.*\bvideo\b/.test(
-        normalizedMessage
-      ) ||
-      /\bunsupported\b.*\bvideo\b/.test(normalizedMessage)
-    ) {
-      return "No video";
-    }
-    if (
-      /\b(unavailable|deleted)\b/.test(normalizedMessage) ||
-      /\bnot found\b/.test(normalizedMessage) ||
-      /\bdoes not exist\b/.test(normalizedMessage)
-    ) {
-      return "Unavailable";
-    }
+  // A touch leaves `:hover` set after the finger lifts, so the pointer only
+  // counts as resting on the button where the device has one that hovers.
+  // The class is part of the selector because a bare `:hover` matches only
+  // links on a page in quirks mode.
+  function pointerIsOver(button) {
+    return (
+      window.matchMedia("(hover: hover)").matches &&
+      button.matches(`.${BUTTON_CLASS}:hover`)
+    );
+  }
 
-    return "Try again";
+  // An error stays while the pointer is on the button, so its tooltip can
+  // be read, and resets a fixed time after the pointer leaves.
+  function showError(button, { label, tooltip }) {
+    button.title = tooltip;
+    setButtonState(button, label, ERROR_CLASS);
+    if (!pointerIsOver(button)) {
+      resetAfter(button, ERROR_RESET_DELAY);
+    }
+  }
+
+  function keepErrorWhilePointerIsOver(button) {
+    const showsError = () => button.classList.contains(ERROR_CLASS);
+
+    button.addEventListener("pointerenter", () => {
+      if (showsError()) {
+        window.clearTimeout(button.vpResetTimer);
+      }
+    });
+    button.addEventListener("pointerleave", () => {
+      if (showsError()) {
+        resetAfter(button, ERROR_RESET_DELAY);
+      }
+    });
+  }
+
+  // What the button shows for each error code a failure response carries.
+  // A failure with no tooltip here keeps the helper's prose as its tooltip.
+  const FAILURES = new Map([
+    ["private_post", { label: "Private post" }],
+    [
+      "login_required",
+      {
+        label: "Login required",
+        tooltip:
+          "This post is only shown to signed-in accounts. VideoPaste downloads without your account or cookies, so it can't copy this one.",
+      },
+    ],
+    ["no_video", { label: "No video" }],
+    ["unavailable", { label: "Unavailable" }],
+    [
+      "ytdlp_missing",
+      {
+        label: "Setup needed",
+        tooltip:
+          "VideoPaste needs yt-dlp to download this video. Install it by running “brew install yt-dlp” in Terminal, then try again.",
+      },
+    ],
+    [
+      "helper_unreachable",
+      {
+        label: "Setup needed",
+        tooltip:
+          "The browser can't reach the VideoPaste helper. In your VideoPaste folder, run “./scripts/build-app.sh” to build the app, then “./scripts/install-videopaste-native-host.sh” to register the helper.",
+      },
+    ],
+    ["failed", { label: "Try again" }],
+  ]);
+
+  // An older helper sends prose and no code, so the code is worked out from
+  // the prose. Only a sentence VideoPaste wrote is read for meaning, and it
+  // is recognised by how it opens. Whatever else the helper passes on (raw
+  // `yt-dlp` output, a system error) is `failed`, the code the current
+  // helper gives it: a phrase such as "not found" inside downloader output
+  // never picks a label.
+  const PROSE_CODES = [
+    [
+      /^this looks like a video post rather than a direct video link\b/,
+      "ytdlp_missing",
+    ],
+    [/^this post requires a signed-in account\b/, "login_required"],
+    [/^this (?:x )?post is (?:private|protected)\b/, "private_post"],
+    [
+      /^this post (?:doesn['’]t|does not) contain a supported video\b/,
+      "no_video",
+    ],
+    [/^this post is unavailable\b/, "unavailable"],
+    [/^this video link has expired or is unavailable\b/, "unavailable"],
+    // An unreachable helper is reported in the background script's own
+    // sentence, or in the browser's when no helper is registered or the
+    // helper will not run.
+    [
+      /^the browser could not reach the videopaste helper\b/,
+      "helper_unreachable",
+    ],
+    [
+      /\bnative (?:messaging host|host|application)\b/,
+      "helper_unreachable",
+    ],
+  ];
+
+  function codeFromProse(prose) {
+    const sentence = prose.trim().toLowerCase();
+    return (
+      PROSE_CODES.find(([pattern]) => pattern.test(sentence))?.[1] ??
+      "failed"
+    );
+  }
+
+  // The label and tooltip for a failed attempt. `response` is the failure
+  // response, or what stands in for one when no response arrived.
+  function failureFeedback(response) {
+    const prose =
+      typeof response?.error === "string" && response.error
+        ? response.error
+        : "The video could not be copied.";
+    const code =
+      typeof response?.code === "string"
+        ? response.code
+        : codeFromProse(prose);
+    const failure = FAILURES.get(code) ?? FAILURES.get("failed");
+
+    return { label: failure.label, tooltip: failure.tooltip ?? prose };
   }
 
   function makeButton(container) {
@@ -755,8 +847,7 @@
       "aria-label",
       "Click to download and copy this video, or drag to reposition"
     );
-    button.title =
-      "Click to copy the video, or drag this control to reposition it";
+    button.title = RESTING_TOOLTIP;
 
     const badge = document.createElement("span");
     badge.className = "vp-copy-button__badge";
@@ -784,55 +875,38 @@
 
       const sourceURL = site.findSourceURL(container);
       if (!sourceURL) {
-        button.title = site.notFound.tooltip;
-        showFeedback(
-          button,
-          site.notFound.label,
-          "vp-copy-button--error",
-          site.notFound.resetDelay
-        );
+        showError(button, site.notFound);
         return;
       }
 
       button.dataset.vpBusy = "true";
       button.disabled = true;
-      showFeedback(
-        button,
-        "Loading…",
-        "vp-copy-button--loading",
-        null
-      );
+      setButtonState(button, "Loading…", LOADING_CLASS);
 
+      let response;
       try {
-        const response = await extensionMessaging.sendMessage({
+        response = await extensionMessaging.sendMessage({
           type: "vp-download-and-copy",
           url: sourceURL,
         });
+      } catch (error) {
+        response = { ok: false, error: error?.message };
+      }
 
-        if (!response?.ok) {
-          throw new Error(
-            response?.error ?? "The video could not be copied."
-          );
-        }
+      button.disabled = false;
+      delete button.dataset.vpBusy;
 
+      if (response?.ok) {
         button.title = response.fileName
           ? `Copied ${response.fileName}`
           : "Copied to the clipboard";
-        showFeedback(button, "Copied!", "vp-copy-button--sent", 2200);
-      } catch (error) {
-        button.title =
-          error?.message ?? "The video could not be copied.";
-        showFeedback(
-          button,
-          errorFeedbackMessage(error?.message),
-          "vp-copy-button--error",
-          3200
-        );
-      } finally {
-        button.disabled = false;
-        delete button.dataset.vpBusy;
+        setButtonState(button, "Copied!", SENT_CLASS);
+        resetAfter(button, SENT_RESET_DELAY);
+      } else {
+        showError(button, failureFeedback(response));
       }
     });
+    keepErrorWhilePointerIsOver(button);
     enableButtonDragging(button, container);
 
     return button;
