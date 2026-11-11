@@ -63,6 +63,31 @@ public enum VideoDownloadError: LocalizedError {
   }
 }
 
+extension VideoDownloadError {
+  /// The stable code the helper sends to the browser for this failure.
+  public var code: NativeErrorCode {
+    switch self {
+    case .privatePost:
+      return .privatePost
+    case .authenticationRequired:
+      return .loginRequired
+    case .noVideo:
+      return .noVideo
+    case .unavailablePost:
+      return .unavailable
+    case .serverRejected(let statusCode):
+      // Matches the prose: only an expired or missing link reads as
+      // unavailable.
+      return statusCode == 403 || statusCode == 404 ? .unavailable : .failed
+    case .downloaderUnavailable:
+      return .ytdlpMissing
+    case .invalidURL, .unsupportedURL, .badServerResponse, .emptyDownload,
+      .helperFailed, .outputMissing:
+      return .failed
+    }
+  }
+}
+
 /// How a source URL is fetched.
 enum DownloadRoute: Equatable {
   /// The URL is a complete video file, fetched as it is.
